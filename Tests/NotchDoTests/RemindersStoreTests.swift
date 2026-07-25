@@ -194,6 +194,54 @@ struct RemindersStoreTests {
         #expect(store.lastSyncedAt != nil)
     }
 
+    @Test("A stale reload cannot replace reminders from a newly selected calendar")
+    func staleReloadAfterCalendarSelection() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let work = events.makeCalendar(title: "Work")
+        let inboxReminder = events.makeReminder(title: "Inbox task", calendar: inbox)
+        let workReminder = events.makeReminder(title: "Work task", calendar: work)
+        events.calendarsStub = [inbox, work]
+        events.defaultCalendarStub = inbox
+        events.fetchedReminders = [inboxReminder]
+
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+
+        events.completesFetchImmediately = false
+        let staleReload = Task { await store.reload() }
+        for _ in 0..<10 where events.pendingFetchCompletions.isEmpty {
+            await Task.yield()
+        }
+
+        store.selectCalendar(work.calendarIdentifier)
+        for _ in 0..<10 where events.pendingFetchCompletions.count < 2 {
+            await Task.yield()
+        }
+
+        guard events.pendingFetchCompletions.count == 2 else {
+            Issue.record("Expected one pending fetch for each calendar")
+            events.pendingFetchCompletions.forEach { $0([]) }
+            await staleReload.value
+            return
+        }
+
+        let staleCompletion = events.pendingFetchCompletions[0]
+        let selectedCompletion = events.pendingFetchCompletions[1]
+        selectedCompletion([workReminder])
+        for _ in 0..<10 where store.reminders.first !== workReminder {
+            await Task.yield()
+        }
+
+        staleCompletion([inboxReminder])
+        await staleReload.value
+
+        #expect(store.selectedCalendar === work)
+        #expect(store.reminders.count == 1)
+        #expect(store.reminders.first === workReminder)
+        #expect(store.syncState == .synced)
+    }
+
     @Test("Manual order survives reload and unseen reminders append in deterministic order")
     func preferredOrder() async {
         let events = FakeReminderEventStore()
@@ -238,7 +286,11 @@ struct RemindersStoreTests {
 
         store.moveReminder("missing", relativeTo: two.calendarItemIdentifier, placeAfter: true)
         store.moveReminder(one.calendarItemIdentifier, relativeTo: "missing", placeAfter: true)
-        store.moveReminder(one.calendarItemIdentifier, relativeTo: one.calendarItemIdentifier, placeAfter: true)
+        store.moveReminder(
+            one.calendarItemIdentifier,
+            relativeTo: one.calendarItemIdentifier,
+            placeAfter: true
+        )
         #expect(store.reminders.map(\.calendarItemIdentifier) == original)
 
         store.moveReminder(

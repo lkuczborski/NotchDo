@@ -1,11 +1,6 @@
 import EventKit
 import Foundation
 
-struct ReminderDueMetadata {
-    let text: String
-    let isOverdue: Bool
-}
-
 extension EKReminder {
     var notchDueDate: Date? {
         guard let components = dueDateComponents else { return nil }

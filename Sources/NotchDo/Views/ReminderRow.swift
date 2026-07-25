@@ -56,9 +56,7 @@ struct ReminderRow: View {
             flushPendingSave()
             titleFocused = false
         }
-        .onDisappear {
-            saveTask?.cancel()
-        }
+        .onDisappear(perform: handleDisappear)
     }
 
     private var summary: some View {
@@ -220,7 +218,11 @@ struct ReminderRow: View {
             HStack(spacing: 8) {
                 if let due {
                     Label(due.text, systemImage: "calendar")
-                        .foregroundStyle(due.isOverdue ? Color.red.opacity(0.72) : .white.opacity(0.3))
+                        .foregroundStyle(
+                            due.isOverdue
+                                ? Color.red.opacity(0.72)
+                                : .white.opacity(0.3)
+                        )
                 }
                 if let priority {
                     Text(priority)
@@ -287,6 +289,18 @@ struct ReminderRow: View {
         let snapshot = draft
         pendingFields.removeAll()
         Task { await store.update(reminder, with: snapshot, fields: fields) }
+    }
+
+    private func handleDisappear() {
+        let reminderStillExists = store.reminders.contains {
+            $0.calendarItemIdentifier == reminder.calendarItemIdentifier
+        }
+        if reminderStillExists {
+            flushPendingSave()
+        } else {
+            saveTask?.cancel()
+            saveTask = nil
+        }
     }
 
     @MainActor

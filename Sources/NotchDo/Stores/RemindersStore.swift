@@ -15,6 +15,7 @@ final class RemindersStore: NSObject, ObservableObject {
     private let eventStore: any ReminderEventStore
     private let now: () -> Date
     private var preferredOrderByCalendar: [String: [String]] = [:]
+    private var reloadGeneration = 0
 
     override init() {
         eventStore = EKEventStore()
@@ -59,12 +60,17 @@ final class RemindersStore: NSObject, ObservableObject {
     }
 
     func reload() async {
+        reloadGeneration &+= 1
+        let generation = reloadGeneration
+
         guard authorization == .fullAccess else { return }
         guard let calendar = selectedCalendar else {
             reminders = []
+            syncState = .idle
             return
         }
 
+        let calendarIdentifier = calendar.calendarIdentifier
         syncState = .syncing
         let predicate = eventStore.predicateForReminders(in: [calendar])
         let fetched: [EKReminder] = await withCheckedContinuation { continuation in
@@ -73,12 +79,15 @@ final class RemindersStore: NSObject, ObservableObject {
             }
         }
 
+        guard generation == reloadGeneration,
+              selectedCalendarIdentifier == calendarIdentifier else { return }
+
         let incompleteReminders = fetched.filter { !$0.isCompleted }
         reminders = orderedReminders(
             incompleteReminders,
-            calendarIdentifier: calendar.calendarIdentifier
+            calendarIdentifier: calendarIdentifier
         )
-        preferredOrderByCalendar[calendar.calendarIdentifier]
+        preferredOrderByCalendar[calendarIdentifier]
             = reminders.map(\.calendarItemIdentifier)
         lastSyncedAt = now()
         syncState = .synced

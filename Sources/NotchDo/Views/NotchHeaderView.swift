@@ -68,7 +68,9 @@ struct NotchHeaderView: View {
         .onChange(of: isCalendarPickerPresented) { _, _ in
             reportTransientInteraction()
         }
-        .accessibilityLabel("Reminder list: \(store.selectedCalendarTitle), \(store.reminders.count) reminders")
+        .accessibilityLabel(
+            "Reminder list: \(store.selectedCalendarTitle), \(store.reminders.count) reminders"
+        )
     }
 
     private var calendarList: some View {
@@ -102,7 +104,8 @@ struct NotchHeaderView: View {
 
                                     Spacer(minLength: 12)
 
-                                    if calendar.calendarIdentifier == store.selectedCalendarIdentifier {
+                                    if calendar.calendarIdentifier
+                                        == store.selectedCalendarIdentifier {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(calendar.notchColor)

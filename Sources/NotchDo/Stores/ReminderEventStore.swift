@@ -17,15 +17,3 @@ protocol ReminderEventStore: AnyObject {
     func save(_ reminder: EKReminder, commit: Bool) throws
     func remove(_ reminder: EKReminder, commit: Bool) throws
 }
-
-extension EKEventStore: ReminderEventStore {
-    var notificationObject: AnyObject? { self }
-
-    func authorizationStatus() -> EKAuthorizationStatus {
-        Self.authorizationStatus(for: .reminder)
-    }
-
-    func makeReminder() -> EKReminder {
-        EKReminder(eventStore: self)
-    }
-}

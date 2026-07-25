@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 
 struct NotchMetrics: Equatable {
     let collapsedSize: CGSize
@@ -59,57 +58,5 @@ struct NotchMetrics: Equatable {
                 height: fallbackBridgeHeight + 2
             )
         )
-    }
-}
-
-struct NotchScreenGeometry {
-    let frame: CGRect
-    let safeAreaTopInset: CGFloat
-    let auxiliaryTopLeftArea: CGRect?
-    let auxiliaryTopRightArea: CGRect?
-
-    init(
-        frame: CGRect,
-        safeAreaTopInset: CGFloat,
-        auxiliaryTopLeftArea: CGRect?,
-        auxiliaryTopRightArea: CGRect?
-    ) {
-        self.frame = frame
-        self.safeAreaTopInset = safeAreaTopInset
-        self.auxiliaryTopLeftArea = auxiliaryTopLeftArea
-        self.auxiliaryTopRightArea = auxiliaryTopRightArea
-    }
-
-    init(screen: NSScreen) {
-        self.init(
-            frame: screen.frame,
-            safeAreaTopInset: screen.safeAreaInsets.top,
-            auxiliaryTopLeftArea: screen.auxiliaryTopLeftArea,
-            auxiliaryTopRightArea: screen.auxiliaryTopRightArea
-        )
-    }
-}
-
-@MainActor
-final class NotchLayoutModel: ObservableObject {
-    @Published private(set) var metrics: NotchMetrics
-
-    init(screen: NSScreen) {
-        metrics = .resolve(for: screen)
-    }
-
-    init(geometry: NotchScreenGeometry) {
-        metrics = .resolve(for: geometry)
-    }
-
-    func update(for screen: NSScreen) {
-        update(for: NotchScreenGeometry(screen: screen))
-    }
-
-    func update(for geometry: NotchScreenGeometry) {
-        let newMetrics = NotchMetrics.resolve(for: geometry)
-        if newMetrics != metrics {
-            metrics = newMetrics
-        }
     }
 }
