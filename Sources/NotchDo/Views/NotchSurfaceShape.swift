@@ -15,16 +15,9 @@ struct NotchSurfaceShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let topRadius = min(
-            max(0, topCornerRadius),
-            rect.width / 4,
-            rect.height / 2
-        )
-        let bottomRadius = min(
-            max(0, bottomCornerRadius),
-            max(0, rect.width / 2 - topRadius),
-            rect.height / 2
-        )
+        let radii = resolvedRadii(in: rect)
+        let topRadius = radii.top
+        let bottomRadius = radii.bottom
 
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
@@ -63,5 +56,19 @@ struct NotchSurfaceShape: Shape {
 
         path.closeSubpath()
         return path
+    }
+
+    func resolvedRadii(in rect: CGRect) -> (top: CGFloat, bottom: CGFloat) {
+        let top = min(
+            max(0, topCornerRadius),
+            rect.width / 4,
+            rect.height / 2
+        )
+        let bottom = min(
+            max(0, bottomCornerRadius),
+            max(0, rect.width / 2 - top),
+            rect.height / 2
+        )
+        return (top, bottom)
     }
 }

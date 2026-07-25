@@ -1,0 +1,31 @@
+import EventKit
+import Foundation
+
+protocol ReminderEventStore: AnyObject {
+    var notificationObject: AnyObject? { get }
+
+    func authorizationStatus() -> EKAuthorizationStatus
+    func requestFullAccessToReminders() async throws -> Bool
+    func calendars(for entityType: EKEntityType) -> [EKCalendar]
+    func defaultCalendarForNewReminders() -> EKCalendar?
+    func predicateForReminders(in calendars: [EKCalendar]?) -> NSPredicate
+    func fetchReminders(
+        matching predicate: NSPredicate,
+        completion: @escaping ([EKReminder]?) -> Void
+    ) -> Any
+    func makeReminder() -> EKReminder
+    func save(_ reminder: EKReminder, commit: Bool) throws
+    func remove(_ reminder: EKReminder, commit: Bool) throws
+}
+
+extension EKEventStore: ReminderEventStore {
+    var notificationObject: AnyObject? { self }
+
+    func authorizationStatus() -> EKAuthorizationStatus {
+        Self.authorizationStatus(for: .reminder)
+    }
+
+    func makeReminder() -> EKReminder {
+        EKReminder(eventStore: self)
+    }
+}

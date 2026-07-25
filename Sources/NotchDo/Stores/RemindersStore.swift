@@ -12,16 +12,33 @@ final class RemindersStore: NSObject, ObservableObject {
     @Published private(set) var lastSyncedAt: Date?
     @Published private(set) var lastAddedReminderIdentifier: String?
 
-    private let eventStore = EKEventStore()
+    private let eventStore: any ReminderEventStore
+    private let now: () -> Date
     private var preferredOrderByCalendar: [String: [String]] = [:]
 
     override init() {
+        eventStore = EKEventStore()
+        now = Date.init
         super.init()
+        observeEventStoreChanges()
+    }
+
+    init(
+        eventStore: any ReminderEventStore,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.eventStore = eventStore
+        self.now = now
+        super.init()
+        observeEventStoreChanges()
+    }
+
+    private func observeEventStoreChanges() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(eventStoreDidChange),
             name: .EKEventStoreChanged,
-            object: eventStore
+            object: eventStore.notificationObject
         )
     }
 
@@ -51,7 +68,7 @@ final class RemindersStore: NSObject, ObservableObject {
         syncState = .syncing
         let predicate = eventStore.predicateForReminders(in: [calendar])
         let fetched: [EKReminder] = await withCheckedContinuation { continuation in
-            eventStore.fetchReminders(matching: predicate) { reminders in
+            _ = eventStore.fetchReminders(matching: predicate) { reminders in
                 continuation.resume(returning: reminders ?? [])
             }
         }
@@ -63,7 +80,7 @@ final class RemindersStore: NSObject, ObservableObject {
         )
         preferredOrderByCalendar[calendar.calendarIdentifier]
             = reminders.map(\.calendarItemIdentifier)
-        lastSyncedAt = Date()
+        lastSyncedAt = now()
         syncState = .synced
     }
 
@@ -78,7 +95,7 @@ final class RemindersStore: NSObject, ObservableObject {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty, let calendar = selectedCalendar else { return false }
 
-        let reminder = EKReminder(eventStore: eventStore)
+        let reminder = eventStore.makeReminder()
         reminder.calendar = calendar
         reminder.title = cleanTitle
 
@@ -202,7 +219,7 @@ final class RemindersStore: NSObject, ObservableObject {
         syncState = .syncing
         do {
             try eventStore.save(reminder, commit: true)
-            lastSyncedAt = Date()
+            lastSyncedAt = now()
             syncState = .synced
         } catch {
             reminder.title = previousTitle
@@ -224,7 +241,7 @@ final class RemindersStore: NSObject, ObservableObject {
     }
 
     private func resolveAuthorization(requestIfNeeded: Bool) async {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
+        let status = eventStore.authorizationStatus()
 
         switch status {
         case .fullAccess, .authorized:
