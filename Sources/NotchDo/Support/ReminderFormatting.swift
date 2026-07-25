@@ -14,16 +14,22 @@ extension EKReminder {
     }
 
     var notchDueMetadata: ReminderDueMetadata? {
+        notchDueMetadata(relativeTo: Date(), calendar: .autoupdatingCurrent)
+    }
+
+    func notchDueMetadata(
+        relativeTo now: Date,
+        calendar: Calendar
+    ) -> ReminderDueMetadata? {
         guard let dueDate = notchDueDate else { return nil }
 
-        let calendar = Calendar.autoupdatingCurrent
-        let now = Date()
         let includesTime = dueDateComponents?.hour != nil
         let dayText: String
 
-        if calendar.isDateInToday(dueDate) {
+        if calendar.isDate(dueDate, inSameDayAs: now) {
             dayText = "Today"
-        } else if calendar.isDateInTomorrow(dueDate) {
+        } else if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
+                  calendar.isDate(dueDate, inSameDayAs: tomorrow) {
             dayText = "Tomorrow"
         } else {
             dayText = dueDate.formatted(.dateTime.month(.abbreviated).day())

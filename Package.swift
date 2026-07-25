@@ -18,6 +18,11 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("EventKit")
             ]
+        ),
+        .testTarget(
+            name: "NotchDoTests",
+            dependencies: ["NotchDo"],
+            path: "Tests/NotchDoTests"
         )
     ],
     swiftLanguageModes: [.v5]
