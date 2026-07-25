@@ -6,6 +6,8 @@
     <string>NotchDo</string>
     <key>CFBundleIdentifier</key>
     <string>com.luku.NotchDo</string>
+    <key>CFBundleIconFile</key>
+    <string>NotchDo.icns</string>
     <key>CFBundleName</key>
     <string>NotchDo</string>
     <key>CFBundlePackageType</key>
