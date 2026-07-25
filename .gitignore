@@ -1,0 +1,23 @@
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Local application bundles
+dist/
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Local design and visual verification artifacts
+design-qa.md
+qa-*.jpeg
+qa-*.jpg
+qa-*.png
+
+# Editor files
+*.swp
+*~
