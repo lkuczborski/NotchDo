@@ -1,11 +1,19 @@
 # NotchDo
 
+<p align="center">
+  <img src="docs/assets/notchdo-icon-readme.png" alt="NotchDo app icon" width="180">
+</p>
+
 NotchDo is a focused Apple Reminders client that expands from the MacBook
 display notch. It keeps the everyday task loop—capture, review, edit, complete—
 available without opening a conventional window.
 
 NotchDo uses Apple Reminders directly through EventKit. It has no account,
 cloud service, analytics pipeline, or separate task database.
+
+<p align="center">
+  <img src="docs/assets/notchdo-demo.gif" alt="NotchDo expanding from the MacBook notch to manage reminders" width="640">
+</p>
 
 ## Highlights
 
