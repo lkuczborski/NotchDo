@@ -14,6 +14,7 @@ final class FakeReminderEventStore: ReminderEventStore {
     var saveError: Error?
     var removeError: Error?
     var savedReminders: [EKReminder] = []
+    var createdCalendars: [EKCalendar] = []
     var removedReminders: [EKReminder] = []
     var accessRequestCount = 0
     var fetchCount = 0
@@ -61,6 +62,16 @@ final class FakeReminderEventStore: ReminderEventStore {
 
     func makeReminder() -> EKReminder {
         EKReminder(eventStore: backingStore)
+    }
+
+    func createReminderCalendar(title: String) throws -> EKCalendar {
+        if let saveError {
+            throw saveError
+        }
+        let calendar = makeCalendar(title: title)
+        createdCalendars.append(calendar)
+        calendarsStub.append(calendar)
+        return calendar
     }
 
     func save(_ reminder: EKReminder, commit: Bool) throws {

@@ -14,6 +14,7 @@ protocol ReminderEventStore: AnyObject {
         completion: @escaping ([EKReminder]?) -> Void
     ) -> Any
     func makeReminder() -> EKReminder
+    func createReminderCalendar(title: String) throws -> EKCalendar
     func save(_ reminder: EKReminder, commit: Bool) throws
     func remove(_ reminder: EKReminder, commit: Bool) throws
 }

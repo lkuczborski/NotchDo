@@ -5,11 +5,11 @@ struct ReminderRow: View {
     let reminder: EKReminder
     @ObservedObject var store: RemindersStore
     @Binding var isExpanded: Bool
+    let isHovering: Bool
     let onHoverChange: (Bool) -> Void
 
     @State private var draft: ReminderDraft
     @State private var isCompleting = false
-    @State private var isHovering = false
     @State private var pendingFields: Set<ReminderEditField> = []
     @State private var saveTask: Task<Void, Never>?
     @FocusState private var titleFocused: Bool
@@ -18,11 +18,13 @@ struct ReminderRow: View {
         reminder: EKReminder,
         store: RemindersStore,
         isExpanded: Binding<Bool>,
+        isHovering: Bool,
         onHoverChange: @escaping (Bool) -> Void
     ) {
         self.reminder = reminder
         self.store = store
         _isExpanded = isExpanded
+        self.isHovering = isHovering
         self.onHoverChange = onHoverChange
         _draft = State(initialValue: ReminderDraft(reminder: reminder))
     }
@@ -48,7 +50,6 @@ struct ReminderRow: View {
         .animation(.smooth(duration: 0.22, extraBounce: 0), value: isExpanded)
         .animation(.easeOut(duration: 0.14), value: isHovering)
         .onHover { hovering in
-            isHovering = hovering
             onHoverChange(hovering)
         }
         .onChange(of: isExpanded) { _, rowIsExpanded in

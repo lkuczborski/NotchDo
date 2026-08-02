@@ -14,7 +14,6 @@ final class RemindersStore: NSObject, ObservableObject {
 
     private let eventStore: any ReminderEventStore
     private let now: () -> Date
-    private var preferredOrderByCalendar: [String: [String]] = [:]
     private var reloadGeneration = 0
 
     override init() {
@@ -83,12 +82,7 @@ final class RemindersStore: NSObject, ObservableObject {
               selectedCalendarIdentifier == calendarIdentifier else { return }
 
         let incompleteReminders = fetched.filter { !$0.isCompleted }
-        reminders = orderedReminders(
-            incompleteReminders,
-            calendarIdentifier: calendarIdentifier
-        )
-        preferredOrderByCalendar[calendarIdentifier]
-            = reminders.map(\.calendarItemIdentifier)
+        reminders = incompleteReminders
         lastSyncedAt = now()
         syncState = .synced
     }
@@ -111,10 +105,6 @@ final class RemindersStore: NSObject, ObservableObject {
         do {
             try eventStore.save(reminder, commit: true)
             let identifier = reminder.calendarItemIdentifier
-            appendToPreferredOrder(
-                identifier,
-                calendarIdentifier: calendar.calendarIdentifier
-            )
             await reload()
             lastAddedReminderIdentifier = identifier
             return true
@@ -142,32 +132,20 @@ final class RemindersStore: NSObject, ObservableObject {
         }
     }
 
-    func moveReminder(
-        _ movingIdentifier: String,
-        relativeTo targetIdentifier: String,
-        placeAfter: Bool
-    ) {
-        guard movingIdentifier != targetIdentifier,
-              let movingIndex = reminders.firstIndex(where: {
-                  $0.calendarItemIdentifier == movingIdentifier
-              }),
-              reminders.contains(where: {
-                  $0.calendarItemIdentifier == targetIdentifier
-              }) else { return }
+    @discardableResult
+    func createCalendar(title: String) async -> Bool {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard authorization == .fullAccess, !cleanTitle.isEmpty else { return false }
 
-        var reordered = reminders
-        let movingReminder = reordered.remove(at: movingIndex)
-        guard let targetIndex = reordered.firstIndex(where: {
-            $0.calendarItemIdentifier == targetIdentifier
-        }) else { return }
-
-        let insertionIndex = targetIndex + (placeAfter ? 1 : 0)
-        reordered.insert(movingReminder, at: insertionIndex)
-        reminders = reordered
-
-        if let selectedCalendarIdentifier {
-            preferredOrderByCalendar[selectedCalendarIdentifier]
-                = reordered.map(\.calendarItemIdentifier)
+        do {
+            let calendar = try eventStore.createReminderCalendar(title: cleanTitle)
+            loadCalendars()
+            selectedCalendarIdentifier = calendar.calendarIdentifier
+            await reload()
+            return true
+        } catch {
+            syncState = .failed(error.localizedDescription)
+            return false
         }
     }
 
@@ -302,57 +280,6 @@ final class RemindersStore: NSObject, ObservableObject {
             loadCalendars()
             await reload()
         }
-    }
-
-    private static func reminderSort(_ lhs: EKReminder, _ rhs: EKReminder) -> Bool {
-        switch (lhs.notchDueDate, rhs.notchDueDate) {
-        case let (left?, right?) where left != right:
-            return left < right
-        case (_?, nil):
-            return true
-        case (nil, _?):
-            return false
-        default:
-            return (lhs.title ?? "").localizedStandardCompare(rhs.title ?? "") == .orderedAscending
-        }
-    }
-
-    private func orderedReminders(
-        _ fetched: [EKReminder],
-        calendarIdentifier: String
-    ) -> [EKReminder] {
-        let reminderByIdentifier = Dictionary(
-            uniqueKeysWithValues: fetched.map { ($0.calendarItemIdentifier, $0) }
-        )
-        let preferredOrder = preferredOrderByCalendar[calendarIdentifier] ?? []
-
-        guard !preferredOrder.isEmpty else {
-            return fetched.sorted(by: Self.reminderSort)
-        }
-
-        var includedIdentifiers = Set<String>()
-        var ordered = preferredOrder.compactMap { identifier -> EKReminder? in
-            guard let reminder = reminderByIdentifier[identifier] else { return nil }
-            includedIdentifiers.insert(identifier)
-            return reminder
-        }
-
-        let unseenReminders = fetched
-            .filter { !includedIdentifiers.contains($0.calendarItemIdentifier) }
-            .sorted(by: Self.reminderSort)
-        ordered.append(contentsOf: unseenReminders)
-        return ordered
-    }
-
-    private func appendToPreferredOrder(
-        _ identifier: String,
-        calendarIdentifier: String
-    ) {
-        var order = preferredOrderByCalendar[calendarIdentifier]
-            ?? reminders.map(\.calendarItemIdentifier)
-        order.removeAll { $0 == identifier }
-        order.append(identifier)
-        preferredOrderByCalendar[calendarIdentifier] = order
     }
 
     private static func dueDateComponents(for draft: ReminderDraft) -> DateComponents {

@@ -23,7 +23,7 @@ struct RemindersStoreTests {
         #expect(events.fetchCount == 0)
     }
 
-    @Test("Full access loads sorted calendars, selects the default, and reloads open reminders")
+    @Test("Full access loads sorted calendars, selects the default, and preserves reminder order")
     func startWithFullAccess() async {
         let events = FakeReminderEventStore()
         let inbox = events.makeCalendar(title: "Inbox")
@@ -59,7 +59,7 @@ struct RemindersStoreTests {
         #expect(store.selectedCalendar === inbox)
         #expect(store.selectedCalendarIdentifier == inbox.calendarIdentifier)
         #expect(store.selectedCalendarTitle == "Inbox")
-        #expect(store.reminders.map(\.title) == ["Earlier", "Later", "Alpha", "Beta"])
+        #expect(store.reminders.map(\.title) == ["Beta", "Later", "Alpha", "Earlier"])
         #expect(store.lastSyncedAt == syncDate)
         #expect(store.syncState == .synced)
         #expect(events.fetchCount == 1)
@@ -242,8 +242,8 @@ struct RemindersStoreTests {
         #expect(store.syncState == .synced)
     }
 
-    @Test("Manual order survives reload and unseen reminders append in deterministic order")
-    func preferredOrder() async {
+    @Test("Each EventKit fetch order is preserved exactly")
+    func fetchedOrder() async {
         let events = FakeReminderEventStore()
         let inbox = events.makeCalendar(title: "Inbox")
         events.calendarsStub = [inbox]
@@ -253,52 +253,30 @@ struct RemindersStoreTests {
         events.fetchedReminders = [gamma, alpha, beta]
         let store = RemindersStore(eventStore: events)
         await store.start()
-        #expect(store.reminders.map(\.title) == ["Alpha", "Beta", "Gamma"])
-
-        store.moveReminder(
-            gamma.calendarItemIdentifier,
-            relativeTo: alpha.calendarItemIdentifier,
-            placeAfter: false
-        )
         #expect(store.reminders.map(\.title) == ["Gamma", "Alpha", "Beta"])
 
         let aardvark = events.makeReminder(title: "Aardvark", calendar: inbox)
         let zebra = events.makeReminder(title: "Zebra", calendar: inbox)
         events.fetchedReminders = [zebra, beta, aardvark, alpha, gamma]
         await store.reload()
-        #expect(store.reminders.map(\.title) == [
-            "Gamma", "Alpha", "Beta", "Aardvark", "Zebra"
-        ])
+        #expect(store.reminders.map(\.title) == ["Zebra", "Beta", "Aardvark", "Alpha", "Gamma"])
     }
 
-    @Test("Invalid moves are no-ops; valid after-placement uses post-removal target index")
-    func movingReminders() async {
+    @Test("Creating a list trims its title, selects it, and rejects blank input")
+    func createCalendar() async {
         let events = FakeReminderEventStore()
         let inbox = events.makeCalendar(title: "Inbox")
         events.calendarsStub = [inbox]
-        let one = events.makeReminder(title: "One", calendar: inbox)
-        let two = events.makeReminder(title: "Two", calendar: inbox)
-        let three = events.makeReminder(title: "Three", calendar: inbox)
-        events.fetchedReminders = [one, three, two]
         let store = RemindersStore(eventStore: events)
         await store.start()
-        let original = store.reminders.map(\.calendarItemIdentifier)
 
-        store.moveReminder("missing", relativeTo: two.calendarItemIdentifier, placeAfter: true)
-        store.moveReminder(one.calendarItemIdentifier, relativeTo: "missing", placeAfter: true)
-        store.moveReminder(
-            one.calendarItemIdentifier,
-            relativeTo: one.calendarItemIdentifier,
-            placeAfter: true
-        )
-        #expect(store.reminders.map(\.calendarItemIdentifier) == original)
+        #expect(await !store.createCalendar(title: " \n "))
+        #expect(events.createdCalendars.isEmpty)
 
-        store.moveReminder(
-            one.calendarItemIdentifier,
-            relativeTo: three.calendarItemIdentifier,
-            placeAfter: true
-        )
-        #expect(store.reminders.map(\.title) == ["Three", "One", "Two"])
+        #expect(await store.createCalendar(title: "  Projects \n"))
+        #expect(events.createdCalendars.map(\.title) == ["Projects"])
+        #expect(store.selectedCalendarTitle == "Projects")
+        #expect(store.calendars.map(\.title) == ["Inbox", "Projects"])
     }
 
     @Test("Adding trims titles, rejects empty input, and appends the new reminder")

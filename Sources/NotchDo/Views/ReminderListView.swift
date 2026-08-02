@@ -7,6 +7,7 @@ struct ReminderListView: View {
     @Binding var isPointerInsideReminderRow: Bool
 
     @State private var expandedReminderIdentifier: String?
+    @State private var hoveredReminderIdentifier: String?
 
     var body: some View {
         Group {
@@ -22,27 +23,20 @@ struct ReminderListView: View {
                                 isExpanded: expansionBinding(
                                     for: reminder.calendarItemIdentifier
                                 ),
+                                isHovering: hoveredReminderIdentifier
+                                    == reminder.calendarItemIdentifier,
                                 onHoverChange: { hovering in
-                                    isPointerInsideReminderRow = hovering
+                                    updateHover(
+                                        hovering,
+                                        identifier: reminder.calendarItemIdentifier
+                                    )
                                 }
                             )
                             .id(reminder.calendarItemIdentifier)
-                            .draggable(reminder.calendarItemIdentifier)
-                            .dropDestination(for: String.self) { identifiers, location in
-                                guard let movingIdentifier = identifiers.first else {
-                                    return false
-                                }
-
-                                collapseExpandedReminder()
-                                store.moveReminder(
-                                    movingIdentifier,
-                                    relativeTo: reminder.calendarItemIdentifier,
-                                    placeAfter: location.y > 24
-                                )
-                                return true
-                            }
+                            .padding(.vertical, 3)
+                            .contentShape(Rectangle())
                             .listRowInsets(
-                                EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
+                                EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
                             )
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -87,8 +81,15 @@ struct ReminderListView: View {
             .smooth(duration: 0.24, extraBounce: 0),
             value: store.reminders.map(\.calendarItemIdentifier)
         )
+        .onChange(of: store.reminders.map(\.calendarItemIdentifier)) { _, identifiers in
+            guard let hoveredReminderIdentifier,
+                  !identifiers.contains(hoveredReminderIdentifier) else { return }
+            self.hoveredReminderIdentifier = nil
+            isPointerInsideReminderRow = false
+        }
         .onChange(of: isPanelExpanded) { _, panelIsExpanded in
             if !panelIsExpanded {
+                hoveredReminderIdentifier = nil
                 isPointerInsideReminderRow = false
                 collapseExpandedReminder()
             }
@@ -115,6 +116,15 @@ struct ReminderListView: View {
     private func collapseExpandedReminder() {
         guard expandedReminderIdentifier != nil else { return }
         expandedReminderIdentifier = nil
+    }
+
+    private func updateHover(_ hovering: Bool, identifier: String) {
+        if hovering {
+            hoveredReminderIdentifier = identifier
+        } else if hoveredReminderIdentifier == identifier {
+            hoveredReminderIdentifier = nil
+        }
+        isPointerInsideReminderRow = hoveredReminderIdentifier != nil
     }
 
     private var emptyState: some View {

@@ -9,6 +9,8 @@ struct NotchHeaderView: View {
 
     @State private var isCalendarPickerPresented = false
     @State private var isOptionsPresented = false
+    @State private var isCreateListPresented = false
+    @State private var newListTitle = ""
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -71,6 +73,24 @@ struct NotchHeaderView: View {
         .accessibilityLabel(
             "Reminder list: \(store.selectedCalendarTitle), \(store.reminders.count) reminders"
         )
+        .alert("New Reminder List", isPresented: $isCreateListPresented) {
+            TextField("List name", text: $newListTitle)
+            Button("Cancel", role: .cancel) {
+                newListTitle = ""
+            }
+            Button("Create") {
+                let title = newListTitle
+                newListTitle = ""
+                Task {
+                    if await store.createCalendar(title: title) {
+                        isCalendarPickerPresented = false
+                    }
+                }
+            }
+            .disabled(newListTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("The list is created directly in Reminders using EventKit.")
+        }
     }
 
     private var calendarList: some View {
@@ -123,6 +143,21 @@ struct NotchHeaderView: View {
                 }
                 .frame(maxHeight: 190)
             }
+
+            Divider()
+                .padding(.vertical, 2)
+
+            Button {
+                isCreateListPresented = true
+            } label: {
+                Label("New List", systemImage: "plus")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .padding(7)
         .frame(width: 224)
@@ -171,7 +206,9 @@ struct NotchHeaderView: View {
     }
 
     private func reportTransientInteraction() {
-        onTransientInteractionChange(isCalendarPickerPresented || isOptionsPresented)
+        onTransientInteractionChange(
+            isCalendarPickerPresented || isOptionsPresented || isCreateListPresented
+        )
     }
 
 }
