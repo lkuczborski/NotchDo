@@ -13,6 +13,7 @@ DerivedData/
 xcuserdata/
 
 # Local design and visual verification artifacts
+Design/
 design-qa.md
 qa-*.jpeg
 qa-*.jpg
