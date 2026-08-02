@@ -355,6 +355,10 @@ struct RemindersStoreTests {
             Issue.record("A save error should become a failed sync state")
             return
         }
+        #expect(store.syncErrorMessage != nil)
+        store.clearSyncError()
+        #expect(store.syncState == .idle)
+        #expect(store.syncErrorMessage == nil)
     }
 
     @Test("Completing is optimistic on success and fully rolls back on save failure")
@@ -369,7 +373,8 @@ struct RemindersStoreTests {
         await store.start()
 
         events.saveError = TestFailure.requested
-        await store.setCompleted(first)
+        let failedCompletion = await store.setCompleted(first)
+        #expect(!failedCompletion)
         #expect(!first.isCompleted)
         #expect(store.reminders.contains { $0 === first })
         guard case .failed = store.syncState else {
@@ -378,7 +383,8 @@ struct RemindersStoreTests {
         }
 
         events.saveError = nil
-        await store.setCompleted(first)
+        let successfulCompletion = await store.setCompleted(first)
+        #expect(successfulCompletion)
         #expect(first.isCompleted)
         #expect(!store.reminders.contains { $0 === first })
         #expect(events.savedReminders.last === first)
@@ -522,11 +528,19 @@ struct RemindersStoreTests {
 
         var draft = ReminderDraft(reminder: reminder)
         draft.title = "  "
-        await store.update(reminder, with: draft, fields: [.title])
+        let titleOnlyResult = await store.update(reminder, with: draft, fields: [.title])
+        #expect(titleOnlyResult.succeeded)
+        #expect(titleOnlyResult.rejectedFields == [.title])
         #expect(events.savedReminders.isEmpty)
 
         draft.notes = "Still saved"
-        await store.update(reminder, with: draft, fields: [.title, .notes])
+        let mixedResult = await store.update(
+            reminder,
+            with: draft,
+            fields: [.title, .notes]
+        )
+        #expect(mixedResult.succeeded)
+        #expect(mixedResult.rejectedFields == [.title])
         #expect(reminder.title == "Original")
         #expect(reminder.notes == "Still saved")
         #expect(events.savedReminders.count == 1)
@@ -564,12 +578,14 @@ struct RemindersStoreTests {
         draft.hasDueTime = false
         draft.priority = .high
         draft.recurrence = .daily
-        await store.update(
+        let result = await store.update(
             reminder,
             with: draft,
             fields: [.title, .notes, .dueDate, .priority, .recurrence]
         )
 
+        #expect(!result.succeeded)
+        #expect(result.rejectedFields.isEmpty)
         #expect(reminder.title == "Original")
         #expect(reminder.notes == "Original notes")
         #expect(reminder.notchDueDate == originalDueDate)

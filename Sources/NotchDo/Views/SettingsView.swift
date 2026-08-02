@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject var store: RemindersStore
+    let store: RemindersStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {

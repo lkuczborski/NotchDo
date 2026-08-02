@@ -9,8 +9,8 @@ struct ReminderRow: View {
     @Binding var isExpanded: Bool
     let onTransientInteraction: (Bool) -> Void
     let isReminderPresent: () -> Bool
-    let onUpdate: (ReminderDraft, Set<ReminderEditField>) async -> Void
-    let onComplete: () async -> Void
+    let onUpdate: (ReminderDraft, Set<ReminderEditField>) async -> ReminderUpdateResult
+    let onComplete: () async -> Bool
 
     @State private var draft: ReminderDraft
     @State private var isCompleting = false
@@ -25,8 +25,11 @@ struct ReminderRow: View {
         isExpanded: Binding<Bool>,
         onTransientInteraction: @escaping (Bool) -> Void,
         isReminderPresent: @escaping () -> Bool,
-        onUpdate: @escaping (ReminderDraft, Set<ReminderEditField>) async -> Void,
-        onComplete: @escaping () async -> Void
+        onUpdate: @escaping (
+            ReminderDraft,
+            Set<ReminderEditField>
+        ) async -> ReminderUpdateResult,
+        onComplete: @escaping () async -> Bool
     ) {
         self.reminder = reminder
         self.calendarColor = calendarColor
@@ -70,35 +73,38 @@ struct ReminderRow: View {
         HStack(alignment: .top, spacing: 10) {
             completionControl
 
-            VStack(alignment: .leading, spacing: 4) {
-                if isExpanded {
-                    TextField("Reminder title", text: $draft.title)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.94))
-                        .frame(height: 22)
-                        .focused($titleFocused)
-                        .accessibilityLabel("Reminder title")
-                        .onChange(of: draft.title) { _, _ in queueSave(.title) }
-                } else {
-                    Text(displayTitle)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.84))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(minHeight: 22, alignment: .center)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField(
+                        "Reminder title",
+                        text: draftBinding(\.title, field: .title)
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .frame(height: 22)
+                    .focused($titleFocused)
+                    .accessibilityLabel("Reminder title")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Button(action: expand) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(displayTitle)
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.84))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(minHeight: 22, alignment: .center)
 
-                    metadata
+                        metadata
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard !isExpanded else { return }
-                isExpanded = true
-                DispatchQueue.main.async {
-                    titleFocused = true
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(displayTitle)
+                .accessibilityHint("Opens reminder details for editing")
             }
         }
         .padding(.horizontal, 11)
@@ -123,7 +129,7 @@ struct ReminderRow: View {
 
                     if draft.hasDueDate {
                         CenteredDateField(
-                            selection: $draft.dueDate,
+                            selection: draftBinding(\.dueDate, field: .dueDate),
                             onPresentationChange: onTransientInteraction
                         )
                     }
@@ -139,29 +145,34 @@ struct ReminderRow: View {
                         .accessibilityValue(draft.hasDueTime ? "On" : "Off")
 
                     if draft.hasDueTime {
-                        ValidatingTimeField(selection: $draft.dueDate)
+                        ValidatingTimeField(
+                            selection: draftBinding(\.dueDate, field: .dueDate)
+                        )
                     }
                 }
 
                 Spacer(minLength: 0)
             }
             .frame(height: 24, alignment: .center)
-            .onChange(of: draft.dueDate) { _, _ in queueSave(.dueDate) }
 
             HStack(spacing: 18) {
-                detailPicker("Priority", selection: $draft.priority) {
+                detailPicker(
+                    "Priority",
+                    selection: draftBinding(\.priority, field: .priority)
+                ) {
                     ForEach(ReminderPriorityOption.allCases) { option in
                         Text(option.title).tag(option)
                     }
                 }
-                .onChange(of: draft.priority) { _, _ in queueSave(.priority) }
 
-                detailPicker("Repeat", selection: $draft.recurrence) {
+                detailPicker(
+                    "Repeat",
+                    selection: draftBinding(\.recurrence, field: .recurrence)
+                ) {
                     ForEach(visibleRecurrenceOptions) { option in
                         Text(option.title).tag(option)
                     }
                 }
-                .onChange(of: draft.recurrence) { _, _ in queueSave(.recurrence) }
             }
 
             ZStack(alignment: .topLeading) {
@@ -174,7 +185,7 @@ struct ReminderRow: View {
                         .allowsHitTesting(false)
                 }
 
-                TextEditor(text: $draft.notes)
+                TextEditor(text: draftBinding(\.notes, field: .notes))
                     .font(.system(size: 12, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
                     .scrollContentBackground(.hidden)
@@ -188,7 +199,6 @@ struct ReminderRow: View {
                         advanceKeyView(backward: press.modifiers.contains(.shift))
                         return .handled
                     }
-                    .onChange(of: draft.notes) { _, _ in queueSave(.notes) }
             }
             .background(
                 .white.opacity(0.022),
@@ -332,10 +342,25 @@ struct ReminderRow: View {
         }
     }
 
+    private func draftBinding<Value: Equatable>(
+        _ keyPath: WritableKeyPath<ReminderDraft, Value>,
+        field: ReminderEditField
+    ) -> Binding<Value> {
+        Binding(
+            get: { draft[keyPath: keyPath] },
+            set: { newValue in
+                guard draft[keyPath: keyPath] != newValue else { return }
+                draft[keyPath: keyPath] = newValue
+                queueSave(field)
+            }
+        )
+    }
+
     private var dueDateEnabled: Binding<Bool> {
         Binding(
             get: { draft.hasDueDate },
             set: { enabled in
+                guard draft.hasDueDate != enabled else { return }
                 draft.setDueDateEnabled(enabled)
                 queueSave(.dueDate)
             }
@@ -346,6 +371,7 @@ struct ReminderRow: View {
         Binding(
             get: { draft.hasDueTime },
             set: { enabled in
+                guard draft.hasDueTime != enabled else { return }
                 draft.setDueTimeEnabled(enabled)
                 queueSave(.dueDate)
             }
@@ -359,7 +385,10 @@ struct ReminderRow: View {
         let fields = pendingFields
         let snapshot = draft
         pendingFields.removeAll()
-        Task { await onUpdate(snapshot, fields) }
+        Task { @MainActor in
+            let result = await onUpdate(snapshot, fields)
+            reconcileDraft(after: result, fields: fields, snapshot: snapshot)
+        }
     }
 
     private func handleDisappear() {
@@ -375,8 +404,10 @@ struct ReminderRow: View {
     private func savePendingFields() async {
         let fields = pendingFields
         guard !fields.isEmpty else { return }
+        let snapshot = draft
         pendingFields.removeAll()
-        await onUpdate(draft, fields)
+        let result = await onUpdate(snapshot, fields)
+        reconcileDraft(after: result, fields: fields, snapshot: snapshot)
     }
 
     private func complete() {
@@ -385,9 +416,68 @@ struct ReminderRow: View {
         withAnimation(.smooth(duration: 0.16, extraBounce: 0)) {
             isCompleting = true
         }
-        Task {
+        Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(160))
-            await onComplete()
+            guard !Task.isCancelled else { return }
+            let completed = await onComplete()
+            guard !completed else { return }
+            withAnimation(.easeOut(duration: 0.12)) {
+                isCompleting = false
+            }
+        }
+    }
+
+    private func expand() {
+        guard !isExpanded else { return }
+        isExpanded = true
+        DispatchQueue.main.async {
+            titleFocused = true
+        }
+    }
+
+    private func reconcileDraft(
+        after result: ReminderUpdateResult,
+        fields: Set<ReminderEditField>,
+        snapshot: ReminderDraft
+    ) {
+        let fieldsToRestore = result.succeeded ? result.rejectedFields : fields
+        guard !fieldsToRestore.isEmpty else { return }
+
+        let canonical = ReminderDraft(reminder: reminder)
+        for field in fieldsToRestore {
+            restoreField(field, from: canonical, ifUnchangedSince: snapshot)
+        }
+    }
+
+    private func restoreField(
+        _ field: ReminderEditField,
+        from canonical: ReminderDraft,
+        ifUnchangedSince snapshot: ReminderDraft
+    ) {
+        switch field {
+        case .title:
+            guard draft.title == snapshot.title,
+                  draft.title != canonical.title else { return }
+            draft.title = canonical.title
+        case .notes:
+            guard draft.notes == snapshot.notes,
+                  draft.notes != canonical.notes else { return }
+            draft.notes = canonical.notes
+        case .dueDate:
+            guard draft.hasDueDate == snapshot.hasDueDate,
+                  draft.hasDueTime == snapshot.hasDueTime,
+                  draft.dueDate == snapshot.dueDate else { return }
+            draft.hasDueDate = canonical.hasDueDate
+            draft.hasDueTime = canonical.hasDueTime
+            draft.dueDate = canonical.dueDate
+        case .priority:
+            guard draft.priority == snapshot.priority,
+                  draft.priority != canonical.priority else { return }
+            draft.priority = canonical.priority
+        case .recurrence:
+            guard draft.recurrence == snapshot.recurrence,
+                  draft.recurrence != canonical.recurrence else { return }
+            draft.recurrence = canonical.recurrence
         }
     }
 

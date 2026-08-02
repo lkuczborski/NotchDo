@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct NotchRootView: View {
-    @ObservedObject var store: RemindersStore
+    let store: RemindersStore
     @ObservedObject var layout: NotchLayoutModel
     @ObservedObject var interaction: NotchInteractionModel
 
@@ -27,6 +27,12 @@ struct NotchRootView: View {
         }
         .onTapGesture {
             interaction.expand()
+        }
+        .background {
+            SyncErrorPresenter(
+                store: store,
+                onPresentationChange: interaction.updateTransientInteraction
+            )
         }
         .animation(surfaceAnimation, value: isExpanded)
     }
@@ -172,5 +178,41 @@ struct NotchRootView: View {
 
     private func collapseReminderRows() {
         rowCollapseRequest &+= 1
+    }
+}
+
+private struct SyncErrorPresenter: View {
+    let store: RemindersStore
+    let onPresentationChange: (Bool) -> Void
+
+    var body: some View {
+        Color.clear
+            .alert(
+                "Reminders couldn’t be updated",
+                isPresented: isErrorPresented
+            ) {
+                Button("OK") {
+                    store.clearSyncError()
+                }
+            } message: {
+                Text(store.syncErrorMessage ?? "Please try again.")
+            }
+            .onChange(of: store.syncErrorMessage, initial: true) { _, message in
+                onPresentationChange(message != nil)
+            }
+            .onDisappear {
+                onPresentationChange(false)
+            }
+    }
+
+    private var isErrorPresented: Binding<Bool> {
+        Binding(
+            get: { store.syncErrorMessage != nil },
+            set: { presented in
+                if !presented {
+                    store.clearSyncError()
+                }
+            }
+        )
     }
 }

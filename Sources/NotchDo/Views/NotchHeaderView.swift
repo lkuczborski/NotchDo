@@ -3,7 +3,7 @@ import EventKit
 import SwiftUI
 
 struct NotchHeaderView: View {
-    @ObservedObject var store: RemindersStore
+    let store: RemindersStore
     let onInteraction: () -> Void
     let onTransientInteractionChange: (Bool) -> Void
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ComposerView: View {
-    @ObservedObject var store: RemindersStore
+    let store: RemindersStore
     let isActive: Bool
     let onInteraction: () -> Void
 

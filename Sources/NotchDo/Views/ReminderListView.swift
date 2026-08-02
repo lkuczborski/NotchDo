@@ -2,7 +2,7 @@ import EventKit
 import SwiftUI
 
 struct ReminderListView: View {
-    @ObservedObject var store: RemindersStore
+    let store: RemindersStore
     let isPanelExpanded: Bool
     let collapseRequest: Int
     let onTransientInteraction: (Bool) -> Void

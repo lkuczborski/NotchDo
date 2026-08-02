@@ -1,19 +1,20 @@
-import Combine
 import EventKit
 import Foundation
+import Observation
 
 @MainActor
-final class RemindersStore: NSObject, ObservableObject {
+@Observable
+final class RemindersStore: NSObject {
     static let selectedCalendarIdentifierDefaultsKey =
         "notchdo.selectedCalendarIdentifier"
 
-    @Published private(set) var authorization: ReminderAuthorizationState = .notDetermined
-    @Published private(set) var syncState: ReminderSyncState = .idle
-    @Published private(set) var calendars: [EKCalendar] = []
-    @Published private(set) var reminders: [EKReminder] = []
-    @Published private(set) var selectedCalendarIdentifier: String?
-    @Published private(set) var lastSyncedAt: Date?
-    @Published private(set) var lastAddedReminderIdentifier: String?
+    private(set) var authorization: ReminderAuthorizationState = .notDetermined
+    private(set) var syncState: ReminderSyncState = .idle
+    private(set) var calendars: [EKCalendar] = []
+    private(set) var reminders: [EKReminder] = []
+    private(set) var selectedCalendarIdentifier: String?
+    private(set) var lastSyncedAt: Date?
+    private(set) var lastAddedReminderIdentifier: String?
 
     private let eventStore: any ReminderEventStore
     private let now: () -> Date
@@ -125,7 +126,8 @@ final class RemindersStore: NSObject, ObservableObject {
         }
     }
 
-    func setCompleted(_ reminder: EKReminder, completed: Bool = true) async {
+    @discardableResult
+    func setCompleted(_ reminder: EKReminder, completed: Bool = true) async -> Bool {
         let previousValue = reminder.isCompleted
         let previousReminders = reminders
         reminder.isCompleted = completed
@@ -136,10 +138,12 @@ final class RemindersStore: NSObject, ObservableObject {
         do {
             try eventStore.save(reminder, commit: true)
             await reload()
+            return true
         } catch {
             reminder.isCompleted = previousValue
             reminders = previousReminders
             syncState = .failed(error.localizedDescription)
+            return false
         }
     }
 
@@ -176,17 +180,22 @@ final class RemindersStore: NSObject, ObservableObject {
         }
     }
 
+    @discardableResult
     func update(
         _ reminder: EKReminder,
         with draft: ReminderDraft,
         fields requestedFields: Set<ReminderEditField>
-    ) async {
+    ) async -> ReminderUpdateResult {
         var fields = requestedFields
+        var rejectedFields: Set<ReminderEditField> = []
         let cleanTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleanTitle.isEmpty {
+        if fields.contains(.title), cleanTitle.isEmpty {
             fields.remove(.title)
+            rejectedFields.insert(.title)
         }
-        guard !fields.isEmpty else { return }
+        guard !fields.isEmpty else {
+            return .saved(rejecting: rejectedFields)
+        }
 
         let previousTitle = reminder.title
         let previousNotes = reminder.notes
@@ -219,6 +228,7 @@ final class RemindersStore: NSObject, ObservableObject {
             try eventStore.save(reminder, commit: true)
             lastSyncedAt = now()
             syncState = .synced
+            return .saved(rejecting: rejectedFields)
         } catch {
             reminder.title = previousTitle
             reminder.notes = previousNotes
@@ -226,7 +236,18 @@ final class RemindersStore: NSObject, ObservableObject {
             reminder.priority = previousPriority
             reminder.recurrenceRules = previousRecurrenceRules
             syncState = .failed(error.localizedDescription)
+            return .failed
         }
+    }
+
+    var syncErrorMessage: String? {
+        guard case let .failed(message) = syncState else { return nil }
+        return message
+    }
+
+    func clearSyncError() {
+        guard case .failed = syncState else { return }
+        syncState = .idle
     }
 
     func delete(_ reminder: EKReminder) async {

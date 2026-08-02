@@ -29,7 +29,7 @@ cloud service, analytics pipeline, or separate task database.
 - New reminders scroll into view after EventKit saves them
 - Inline editing for title, notes, due date and time, all-day state, priority,
   and supported recurrence rules
-- Escape, scrolling, and outside clicks collapse the active editor
+- Escape and outside clicks collapse the active editor; scrolling leaves it open
 - Purpose-built permission, loading, empty, and error states
 
 ## Requirements
