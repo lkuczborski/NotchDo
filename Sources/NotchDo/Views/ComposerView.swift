@@ -14,7 +14,7 @@ struct ComposerView: View {
             ZStack(alignment: .leading) {
                 if title.isEmpty {
                     Text("New reminder")
-                        .foregroundStyle(.white.opacity(0.2))
+                        .foregroundStyle(.white.opacity(0.5))
                         .allowsHitTesting(false)
                 }
 
