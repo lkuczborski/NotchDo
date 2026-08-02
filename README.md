@@ -22,10 +22,11 @@ cloud service, analytics pipeline, or separate task database.
 - Immediate hover expansion with a compositor-friendly, continuously rounded
   transition
 - List-colored open-task indicator that transitions into the expanded header
-- Apple Reminders list selection and automatic external-change refresh
+- Apple Reminders list selection, list creation, and automatic external-change
+  refresh
 - Keyboard-ready bottom composer with Return and submit-button actions
-- Create, complete, reorder, and swipe-to-delete interactions
-- New reminders append to the bottom and scroll into view
+- Create, complete, and swipe-to-delete interactions
+- New reminders scroll into view after EventKit saves them
 - Inline editing for title, notes, due date and time, all-day state, priority,
   and supported recurrence rules
 - Escape, scrolling, and outside clicks collapse the active editor
@@ -87,13 +88,12 @@ This preserves fields that NotchDo does not currently expose for editing.
 ## Current limitations
 
 - EventKit does not expose Apple Reminders' manual sort-position metadata.
-  Dragged order is therefore maintained per list for the current NotchDo
-  session only. Persisting it would require a separate metadata store.
+  NotchDo therefore preserves the order returned by EventKit and does not offer
+  a reorder interaction that it cannot sync back to Reminders.
 - Features unavailable through the public EventKit API remain owned by Apple
   Reminders and cannot be edited independently in NotchDo.
-- The development runner uses ad-hoc signing. External distribution requires a
-  Developer ID certificate, hardened runtime, notarization, and release
-  packaging.
+- The development runner uses ad-hoc signing; published builds require the
+  maintainer's separate distribution workflow.
 
 ## Project layout
 
@@ -107,12 +107,9 @@ Sources/NotchDo/
 └── Windowing/  AppKit panel integration
 
 Support/        Bundle metadata and sandbox entitlements
-script/         Local build, bundle, sign, and run workflow
+script/         Development and distribution workflows
 ```
 
-## Release
+## License
 
-The current application version is defined in `Support/Info.plist`. Before a
-distribution build, update both `CFBundleShortVersionString` and
-`CFBundleVersion`, then complete Developer ID signing and notarization outside
-the development runner.
+NotchDo is available under the [MIT License](LICENSE).
