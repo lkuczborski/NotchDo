@@ -4,6 +4,9 @@ import Foundation
 
 @MainActor
 final class RemindersStore: NSObject, ObservableObject {
+    static let selectedCalendarIdentifierDefaultsKey =
+        "notchdo.selectedCalendarIdentifier"
+
     @Published private(set) var authorization: ReminderAuthorizationState = .notDetermined
     @Published private(set) var syncState: ReminderSyncState = .idle
     @Published private(set) var calendars: [EKCalendar] = []
@@ -14,21 +17,25 @@ final class RemindersStore: NSObject, ObservableObject {
 
     private let eventStore: any ReminderEventStore
     private let now: () -> Date
+    private let userDefaults: UserDefaults?
     private var reloadGeneration = 0
 
     override init() {
         eventStore = EKEventStore()
         now = Date.init
+        userDefaults = .standard
         super.init()
         observeEventStoreChanges()
     }
 
     init(
         eventStore: any ReminderEventStore,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        userDefaults: UserDefaults? = nil
     ) {
         self.eventStore = eventStore
         self.now = now
+        self.userDefaults = userDefaults
         super.init()
         observeEventStoreChanges()
     }
@@ -89,8 +96,12 @@ final class RemindersStore: NSObject, ObservableObject {
 
     func selectCalendar(_ identifier: String) {
         guard calendars.contains(where: { $0.calendarIdentifier == identifier }) else { return }
-        selectedCalendarIdentifier = identifier
+        setSelectedCalendarIdentifier(identifier)
         Task { await reload() }
+    }
+
+    func dueMode(for reminder: EKReminder) -> ReminderDueMode {
+        return ReminderDueMode(components: reminder.dueDateComponents)
     }
 
     @discardableResult
@@ -140,7 +151,7 @@ final class RemindersStore: NSObject, ObservableObject {
         do {
             let calendar = try eventStore.createReminderCalendar(title: cleanTitle)
             loadCalendars()
-            selectedCalendarIdentifier = calendar.calendarIdentifier
+            setSelectedCalendarIdentifier(calendar.calendarIdentifier)
             await reload()
             return true
         } catch {
@@ -192,7 +203,7 @@ final class RemindersStore: NSObject, ObservableObject {
                 : draft.notes
         }
         if fields.contains(.dueDate) {
-            reminder.dueDateComponents = draft.hasDueDate
+            reminder.dueDateComponents = draft.hasDueDate || draft.hasDueTime
                 ? Self.dueDateComponents(for: draft)
                 : nil
         }
@@ -269,8 +280,25 @@ final class RemindersStore: NSObject, ObservableObject {
             return
         }
 
+        if let rememberedIdentifier = userDefaults?.string(
+            forKey: Self.selectedCalendarIdentifierDefaultsKey
+        ), calendars.contains(where: { $0.calendarIdentifier == rememberedIdentifier }) {
+            selectedCalendarIdentifier = rememberedIdentifier
+            return
+        }
+
         let defaultIdentifier = eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
-        selectedCalendarIdentifier = defaultIdentifier ?? calendars.first?.calendarIdentifier
+        let fallbackIdentifier = defaultIdentifier ?? calendars.first?.calendarIdentifier
+        if let fallbackIdentifier {
+            setSelectedCalendarIdentifier(fallbackIdentifier)
+        } else {
+            selectedCalendarIdentifier = nil
+        }
+    }
+
+    private func setSelectedCalendarIdentifier(_ identifier: String) {
+        selectedCalendarIdentifier = identifier
+        userDefaults?.set(identifier, forKey: Self.selectedCalendarIdentifierDefaultsKey)
     }
 
     @objc
@@ -286,14 +314,18 @@ final class RemindersStore: NSObject, ObservableObject {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .autoupdatingCurrent
 
-        var components = calendar.dateComponents(
-            draft.isAllDay
-                ? [.year, .month, .day]
-                : [.year, .month, .day, .hour, .minute],
-            from: draft.dueDate
-        )
+        var requestedComponents: Set<Calendar.Component> = []
+        if draft.dueMode != .none {
+            requestedComponents.formUnion([.year, .month, .day])
+        }
+        if draft.hasDueTime {
+            requestedComponents.formUnion([.hour, .minute])
+        }
+
+        var components = calendar.dateComponents(requestedComponents, from: draft.dueDate)
         components.calendar = calendar
-        components.timeZone = draft.isAllDay ? nil : .autoupdatingCurrent
+        components.timeZone = draft.hasDueTime ? .autoupdatingCurrent : nil
         return components
     }
+
 }

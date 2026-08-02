@@ -1,12 +1,16 @@
+import AppKit
 import EventKit
 import SwiftUI
 
 struct ReminderRow: View {
     let reminder: EKReminder
-    @ObservedObject var store: RemindersStore
+    let calendarColor: Color
+    let dueMode: ReminderDueMode
     @Binding var isExpanded: Bool
-    let isHovering: Bool
-    let onHoverChange: (Bool) -> Void
+    let onTransientInteraction: (Bool) -> Void
+    let isReminderPresent: () -> Bool
+    let onUpdate: (ReminderDraft, Set<ReminderEditField>) async -> Void
+    let onComplete: () async -> Void
 
     @State private var draft: ReminderDraft
     @State private var isCompleting = false
@@ -16,17 +20,23 @@ struct ReminderRow: View {
 
     init(
         reminder: EKReminder,
-        store: RemindersStore,
+        calendarColor: Color,
+        dueMode: ReminderDueMode,
         isExpanded: Binding<Bool>,
-        isHovering: Bool,
-        onHoverChange: @escaping (Bool) -> Void
+        onTransientInteraction: @escaping (Bool) -> Void,
+        isReminderPresent: @escaping () -> Bool,
+        onUpdate: @escaping (ReminderDraft, Set<ReminderEditField>) async -> Void,
+        onComplete: @escaping () async -> Void
     ) {
         self.reminder = reminder
-        self.store = store
+        self.calendarColor = calendarColor
+        self.dueMode = dueMode
         _isExpanded = isExpanded
-        self.isHovering = isHovering
-        self.onHoverChange = onHoverChange
-        _draft = State(initialValue: ReminderDraft(reminder: reminder))
+        self.onTransientInteraction = onTransientInteraction
+        self.isReminderPresent = isReminderPresent
+        self.onUpdate = onUpdate
+        self.onComplete = onComplete
+        _draft = State(initialValue: ReminderDraft(reminder: reminder, dueMode: dueMode))
     }
 
     var body: some View {
@@ -35,23 +45,19 @@ struct ReminderRow: View {
 
             if isExpanded {
                 editor
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .background(
-            .white.opacity(rowBackgroundOpacity),
+            rowBackgroundColor,
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.white.opacity(rowStrokeOpacity), lineWidth: 1)
+                .stroke(rowStrokeColor, lineWidth: rowStrokeWidth)
         }
-        .scaleEffect(isHovering && !isExpanded ? 1.004 : 1)
-        .animation(.smooth(duration: 0.22, extraBounce: 0), value: isExpanded)
-        .animation(.easeOut(duration: 0.14), value: isHovering)
-        .onHover { hovering in
-            onHoverChange(hovering)
-        }
+        .tint(calendarColor)
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
         .onChange(of: isExpanded) { _, rowIsExpanded in
             guard !rowIsExpanded else { return }
             flushPendingSave()
@@ -69,8 +75,10 @@ struct ReminderRow: View {
                     TextField("Reminder title", text: $draft.title)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(.white.opacity(0.94))
+                        .frame(height: 22)
                         .focused($titleFocused)
+                        .accessibilityLabel("Reminder title")
                         .onChange(of: draft.title) { _, _ in queueSave(.title) }
                 } else {
                     Text(displayTitle)
@@ -78,6 +86,7 @@ struct ReminderRow: View {
                         .foregroundStyle(.white.opacity(0.84))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: 22, alignment: .center)
 
                     metadata
                 }
@@ -98,36 +107,46 @@ struct ReminderRow: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Divider()
-                .overlay(.white.opacity(0.05))
+            Rectangle()
+                .fill(.white.opacity(0.08))
+                .frame(height: 1)
 
-            HStack(spacing: 9) {
-                Label("Due", systemImage: "calendar")
-                    .frame(width: 58, alignment: .leading)
+            HStack(spacing: 12) {
+                dueControlGroup(systemImage: "calendar") {
+                    Toggle("Date", isOn: dueDateEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .fixedSize()
+                        .accessibilityLabel("Due date")
+                        .accessibilityValue(draft.hasDueDate ? "On" : "Off")
 
-                Toggle("", isOn: $draft.hasDueDate)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .onChange(of: draft.hasDueDate) { _, _ in queueSave(.dueDate) }
-
-                if draft.hasDueDate {
-                    DatePicker(
-                        "",
-                        selection: $draft.dueDate,
-                        displayedComponents: draft.isAllDay ? [.date] : [.date, .hourAndMinute]
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.field)
-                    .controlSize(.small)
-                    .onChange(of: draft.dueDate) { _, _ in queueSave(.dueDate) }
-
-                    Toggle("All day", isOn: $draft.isAllDay)
-                        .toggleStyle(.checkbox)
-                        .controlSize(.small)
-                        .onChange(of: draft.isAllDay) { _, _ in queueSave(.dueDate) }
+                    if draft.hasDueDate {
+                        CenteredDateField(
+                            selection: $draft.dueDate,
+                            onPresentationChange: onTransientInteraction
+                        )
+                    }
                 }
+
+                dueControlGroup(systemImage: "clock") {
+                    Toggle("Time", isOn: dueTimeEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .fixedSize()
+                        .accessibilityLabel("Due time")
+                        .accessibilityValue(draft.hasDueTime ? "On" : "Off")
+
+                    if draft.hasDueTime {
+                        ValidatingTimeField(selection: $draft.dueDate)
+                    }
+                }
+
+                Spacer(minLength: 0)
             }
+            .frame(height: 24, alignment: .center)
+            .onChange(of: draft.dueDate) { _, _ in queueSave(.dueDate) }
 
             HStack(spacing: 18) {
                 detailPicker("Priority", selection: $draft.priority) {
@@ -149,9 +168,9 @@ struct ReminderRow: View {
                 if draft.notes.isEmpty {
                     Text("Notes")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.2))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 7)
+                        .foregroundStyle(.white.opacity(0.48))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 8)
                         .allowsHitTesting(false)
                 }
 
@@ -159,8 +178,16 @@ struct ReminderRow: View {
                     .font(.system(size: 12, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
                     .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 4)
+                    .padding(.leading, 5.5)
+                    .padding(.trailing, 4)
+                    .padding(.top, 8)
                     .frame(minHeight: 48, maxHeight: 70)
+                    .accessibilityLabel("Notes")
+                    .onKeyPress(phases: .down) { press in
+                        guard press.key == .tab else { return .ignored }
+                        advanceKeyView(backward: press.modifiers.contains(.shift))
+                        return .handled
+                    }
                     .onChange(of: draft.notes) { _, _ in queueSave(.notes) }
             }
             .background(
@@ -173,7 +200,7 @@ struct ReminderRow: View {
             }
         }
         .font(.system(size: 11, weight: .medium, design: .rounded))
-        .foregroundStyle(.white.opacity(0.42))
+        .foregroundStyle(.white.opacity(0.52))
         .padding(.horizontal, 11)
         .padding(.bottom, 11)
     }
@@ -182,14 +209,14 @@ struct ReminderRow: View {
         ZStack {
             Circle()
                 .stroke(
-                    store.selectedCalendarColor.opacity(isHovering ? 0.62 : 0.46),
+                    calendarColor.opacity(isExpanded ? 0.68 : 0.46),
                     lineWidth: 1.25
                 )
                 .frame(width: 18, height: 18)
 
             if isCompleting {
                 Circle()
-                    .fill(store.selectedCalendarColor)
+                    .fill(calendarColor)
                     .frame(width: 18, height: 18)
                 Image(systemName: "checkmark")
                     .font(.system(size: 8, weight: .black))
@@ -210,7 +237,7 @@ struct ReminderRow: View {
 
     @ViewBuilder
     private var metadata: some View {
-        let due = reminder.notchDueMetadata
+        let due = reminder.notchDueMetadata(mode: dueMode)
         let priority = reminder.notchPrioritySymbol
         let hasNotes = !(reminder.notes ?? "").isEmpty
         let repeats = !(reminder.recurrenceRules ?? []).isEmpty
@@ -221,8 +248,8 @@ struct ReminderRow: View {
                     Label(due.text, systemImage: "calendar")
                         .foregroundStyle(
                             due.isOverdue
-                                ? Color.red.opacity(0.72)
-                                : .white.opacity(0.3)
+                                ? Color.red.opacity(0.9)
+                                : .white.opacity(0.55)
                         )
                 }
                 if let priority {
@@ -237,7 +264,8 @@ struct ReminderRow: View {
                 }
             }
             .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white.opacity(0.27))
+            .foregroundStyle(.white.opacity(0.5))
+            .padding(.leading, -5)
         }
     }
 
@@ -248,11 +276,25 @@ struct ReminderRow: View {
     ) -> some View {
         HStack(spacing: 7) {
             Text(title)
-                .foregroundStyle(.white.opacity(0.34))
+                .foregroundStyle(.white.opacity(0.48))
             Picker("", selection: selection, content: content)
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .controlSize(.small)
+                .foregroundStyle(.white.opacity(0.7))
+                .accessibilityLabel(title)
+        }
+    }
+
+    private func dueControlGroup<Content: View>(
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .frame(width: 13)
+                .accessibilityHidden(true)
+            content()
         }
     }
 
@@ -262,14 +304,22 @@ struct ReminderRow: View {
         }
     }
 
-    private var rowBackgroundOpacity: Double {
-        if isExpanded { return 0.038 }
-        return isHovering ? 0.048 : 0.025
+    private var rowBackgroundColor: Color {
+        if isExpanded {
+            return calendarColor.opacity(0.115)
+        }
+        return .white.opacity(0.025)
     }
 
-    private var rowStrokeOpacity: Double {
-        if isExpanded { return 0.065 }
-        return isHovering ? 0.075 : 0.038
+    private var rowStrokeColor: Color {
+        if isExpanded {
+            return calendarColor.opacity(0.58)
+        }
+        return .white.opacity(0.038)
+    }
+
+    private var rowStrokeWidth: CGFloat {
+        isExpanded ? 1.5 : 1
     }
 
     private func queueSave(_ field: ReminderEditField) {
@@ -282,6 +332,26 @@ struct ReminderRow: View {
         }
     }
 
+    private var dueDateEnabled: Binding<Bool> {
+        Binding(
+            get: { draft.hasDueDate },
+            set: { enabled in
+                draft.setDueDateEnabled(enabled)
+                queueSave(.dueDate)
+            }
+        )
+    }
+
+    private var dueTimeEnabled: Binding<Bool> {
+        Binding(
+            get: { draft.hasDueTime },
+            set: { enabled in
+                draft.setDueTimeEnabled(enabled)
+                queueSave(.dueDate)
+            }
+        )
+    }
+
     private func flushPendingSave() {
         saveTask?.cancel()
         saveTask = nil
@@ -289,14 +359,11 @@ struct ReminderRow: View {
         let fields = pendingFields
         let snapshot = draft
         pendingFields.removeAll()
-        Task { await store.update(reminder, with: snapshot, fields: fields) }
+        Task { await onUpdate(snapshot, fields) }
     }
 
     private func handleDisappear() {
-        let reminderStillExists = store.reminders.contains {
-            $0.calendarItemIdentifier == reminder.calendarItemIdentifier
-        }
-        if reminderStillExists {
+        if isReminderPresent() {
             flushPendingSave()
         } else {
             saveTask?.cancel()
@@ -309,7 +376,7 @@ struct ReminderRow: View {
         let fields = pendingFields
         guard !fields.isEmpty else { return }
         pendingFields.removeAll()
-        await store.update(reminder, with: draft, fields: fields)
+        await onUpdate(draft, fields)
     }
 
     private func complete() {
@@ -320,12 +387,21 @@ struct ReminderRow: View {
         }
         Task {
             try? await Task.sleep(for: .milliseconds(160))
-            await store.setCompleted(reminder)
+            await onComplete()
         }
     }
 
     private var displayTitle: String {
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Untitled reminder" : title
+    }
+
+    private func advanceKeyView(backward: Bool) {
+        guard let window = NSApp.keyWindow else { return }
+        if backward {
+            window.selectPreviousKeyView(nil)
+        } else {
+            window.selectNextKeyView(nil)
+        }
     }
 }

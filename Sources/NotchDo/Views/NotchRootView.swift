@@ -7,7 +7,6 @@ struct NotchRootView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rowCollapseRequest = 0
-    @State private var isPointerInsideReminderRow = false
     @State private var expandedCountFrame: CGRect = .zero
 
     var body: some View {
@@ -21,15 +20,13 @@ struct NotchRootView: View {
             alignment: .top
         )
         .fontDesign(.rounded)
+        .preferredColorScheme(.dark)
         .coordinateSpace(name: NotchCoordinateSpace.root)
         .onPreferenceChange(TaskCountBadgeFrameKey.self) { frame in
             expandedCountFrame = frame
         }
         .onTapGesture {
             interaction.expand()
-            if !isPointerInsideReminderRow {
-                collapseReminderRows()
-            }
         }
         .animation(surfaceAnimation, value: isExpanded)
     }
@@ -128,7 +125,7 @@ struct NotchRootView: View {
                 store: store,
                 isPanelExpanded: isExpanded,
                 collapseRequest: rowCollapseRequest,
-                isPointerInsideReminderRow: $isPointerInsideReminderRow
+                onTransientInteraction: interaction.updateTransientInteraction
             )
         case .requesting:
             AccessStateView(

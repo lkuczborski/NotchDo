@@ -1,13 +1,15 @@
+import EventKit
 import SwiftUI
 
 struct ReminderListView: View {
     @ObservedObject var store: RemindersStore
     let isPanelExpanded: Bool
     let collapseRequest: Int
-    @Binding var isPointerInsideReminderRow: Bool
+    let onTransientInteraction: (Bool) -> Void
 
     @State private var expandedReminderIdentifier: String?
-    @State private var hoveredReminderIdentifier: String?
+    @State private var scrollIndicatorTrigger = 0
+    @State private var revealTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -15,93 +17,109 @@ struct ReminderListView: View {
                 emptyState
             } else {
                 ScrollViewReader { scrollProxy in
-                    List {
-                        ForEach(store.reminders, id: \.calendarItemIdentifier) { reminder in
-                            ReminderRow(
-                                reminder: reminder,
-                                store: store,
-                                isExpanded: expansionBinding(
-                                    for: reminder.calendarItemIdentifier
-                                ),
-                                isHovering: hoveredReminderIdentifier
-                                    == reminder.calendarItemIdentifier,
-                                onHoverChange: { hovering in
-                                    updateHover(
-                                        hovering,
-                                        identifier: reminder.calendarItemIdentifier
-                                    )
-                                }
-                            )
-                            .id(reminder.calendarItemIdentifier)
-                            .padding(.vertical, 3)
-                            .contentShape(Rectangle())
-                            .listRowInsets(
-                                EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
-                            )
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .background {
-                                if reminder.calendarItemIdentifier
-                                    == store.reminders.first?.calendarItemIdentifier {
-                                    ScrollActivityDetector {
-                                        collapseExpandedReminder()
-                                    } onBackgroundClick: {
-                                        collapseExpandedReminder()
-                                    }
-                                }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    Task { await store.delete(reminder) }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
+                    List(store.reminders, id: \.calendarItemIdentifier) { reminder in
+                        reminderCell(
+                            reminder,
+                            isLast: reminder.calendarItemIdentifier
+                                == store.reminders.last?.calendarItemIdentifier
+                        )
+                        .id(reminder.calendarItemIdentifier)
                     }
                     .listStyle(.plain)
                     .contentMargins(.horizontal, 0, for: .scrollContent)
                     .scrollContentBackground(.hidden)
-                    .scrollIndicators(.hidden)
-                    .padding(.horizontal, -8)
-                    .onChange(of: store.lastAddedReminderIdentifier) { _, identifier in
+                    .transientVerticalScrollIndicator(trigger: scrollIndicatorTrigger)
+                    .padding(.leading, -8)
+                    .padding(.trailing, -10)
+                    .background {
+                        ScrollActivityDetector(
+                            expandedRowIndex: expandedRowIndex,
+                            onScroll: {
+                                scrollIndicatorTrigger &+= 1
+                            },
+                            onOutsideClick: collapseExpandedReminder,
+                            onEscape: collapseExpandedReminder
+                        )
+                    }
+                    .onChange(of: expandedReminderIdentifier) { _, identifier in
+                        scheduleRevealIfNeeded(identifier, using: scrollProxy)
+                    }
+                    .task(id: store.lastAddedReminderIdentifier) {
+                        let identifier = store.lastAddedReminderIdentifier
                         guard let identifier else { return }
-                        Task { @MainActor in
-                            await Task.yield()
-                            withAnimation(.smooth(duration: 0.28, extraBounce: 0)) {
-                                scrollProxy.scrollTo(identifier, anchor: .bottom)
-                            }
-                        }
+                        guard store.reminders.contains(where: {
+                            $0.calendarItemIdentifier == identifier
+                        }) else { return }
+
+                        try? await Task.sleep(for: .milliseconds(150))
+                        guard !Task.isCancelled else { return }
+
+                        scrollProxy.scrollTo(identifier, anchor: .bottom)
+
+                        // List can report the inserted identity one layout pass
+                        // before its final row height is committed.
+                        try? await Task.sleep(for: .milliseconds(100))
+                        guard !Task.isCancelled else { return }
+                        scrollProxy.scrollTo(identifier, anchor: .bottom)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(
-            .smooth(duration: 0.24, extraBounce: 0),
-            value: store.reminders.map(\.calendarItemIdentifier)
-        )
-        .onChange(of: store.reminders.map(\.calendarItemIdentifier)) { _, identifiers in
-            guard let hoveredReminderIdentifier,
-                  !identifiers.contains(hoveredReminderIdentifier) else { return }
-            self.hoveredReminderIdentifier = nil
-            isPointerInsideReminderRow = false
-        }
         .onChange(of: isPanelExpanded) { _, panelIsExpanded in
             if !panelIsExpanded {
-                hoveredReminderIdentifier = nil
-                isPointerInsideReminderRow = false
                 collapseExpandedReminder()
             }
+        }
+        .onChange(of: store.reminders.map(\.calendarItemIdentifier)) { _, identifiers in
+            guard let expandedReminderIdentifier,
+                  !identifiers.contains(expandedReminderIdentifier) else { return }
+            self.expandedReminderIdentifier = nil
         }
         .onChange(of: collapseRequest) { _, _ in
             collapseExpandedReminder()
         }
-        .onKeyPress(.escape) {
-            guard expandedReminderIdentifier != nil else { return .ignored }
+        .onExitCommand {
             collapseExpandedReminder()
-            return .handled
         }
+        .onDisappear {
+            revealTask?.cancel()
+            revealTask = nil
+        }
+    }
+
+    private func reminderCell(_ reminder: EKReminder, isLast: Bool) -> some View {
+        ReminderRow(
+            reminder: reminder,
+            calendarColor: store.selectedCalendarColor,
+            dueMode: store.dueMode(for: reminder),
+            isExpanded: expansionBinding(for: reminder.calendarItemIdentifier),
+            onTransientInteraction: onTransientInteraction,
+            isReminderPresent: {
+                store.reminders.contains {
+                    $0.calendarItemIdentifier == reminder.calendarItemIdentifier
+                }
+            },
+            onUpdate: { draft, fields in
+                await store.update(reminder, with: draft, fields: fields)
+            },
+            onComplete: {
+                await store.setCompleted(reminder)
+            }
+        )
+            .padding(.bottom, isLast ? 14 : 0)
+            .listRowInsets(
+                EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+            )
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .destructive) {
+                    deleteReminder(reminder)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
     }
 
     private func expansionBinding(for identifier: String) -> Binding<Bool> {
@@ -118,13 +136,37 @@ struct ReminderListView: View {
         expandedReminderIdentifier = nil
     }
 
-    private func updateHover(_ hovering: Bool, identifier: String) {
-        if hovering {
-            hoveredReminderIdentifier = identifier
-        } else if hoveredReminderIdentifier == identifier {
-            hoveredReminderIdentifier = nil
+    private var expandedRowIndex: Int? {
+        guard let expandedReminderIdentifier else { return nil }
+        return store.reminders.firstIndex {
+            $0.calendarItemIdentifier == expandedReminderIdentifier
         }
-        isPointerInsideReminderRow = hoveredReminderIdentifier != nil
+    }
+
+    private func scheduleRevealIfNeeded(
+        _ identifier: String?,
+        using scrollProxy: ScrollViewProxy
+    ) {
+        revealTask?.cancel()
+        revealTask = nil
+        guard let identifier else { return }
+
+        revealTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(90))
+            guard !Task.isCancelled,
+                  expandedReminderIdentifier == identifier else { return }
+
+            scrollProxy.scrollTo(
+                identifier,
+                anchor: identifier == store.reminders.last?.calendarItemIdentifier
+                    ? .bottom
+                    : .center
+            )
+        }
+    }
+
+    private func deleteReminder(_ reminder: EKReminder) {
+        Task { await store.delete(reminder) }
     }
 
     private var emptyState: some View {
@@ -142,7 +184,7 @@ struct ReminderListView: View {
                 .foregroundStyle(.white.opacity(0.84))
             Text("A very good kind of empty.")
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.32))
+                .foregroundStyle(.white.opacity(0.5))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

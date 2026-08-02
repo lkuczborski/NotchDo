@@ -24,8 +24,8 @@ struct ReminderDraftTests {
         #expect(draft.title == "  Keep spacing  ")
         #expect(draft.notes == "Notes")
         #expect(draft.hasDueDate)
+        #expect(draft.hasDueTime)
         #expect(draft.dueDate == fixedDate(2026, 8, 3, hour: 14, minute: 25))
-        #expect(!draft.isAllDay)
         #expect(draft.priority == .medium)
         #expect(draft.recurrence == .weekly)
     }
@@ -46,7 +46,7 @@ struct ReminderDraftTests {
         #expect(allDayDraft.title.isEmpty)
         #expect(allDayDraft.notes.isEmpty)
         #expect(allDayDraft.hasDueDate)
-        #expect(allDayDraft.isAllDay)
+        #expect(!allDayDraft.hasDueTime)
         #expect(allDayDraft.dueDate == fixedDate(2026, 8, 4))
         #expect(allDayDraft.priority == .none)
         #expect(allDayDraft.recurrence == .never)
@@ -56,7 +56,33 @@ struct ReminderDraftTests {
         let undatedDraft = ReminderDraft(reminder: undated)
         let after = Date()
         #expect(!undatedDraft.hasDueDate)
+        #expect(!undatedDraft.hasDueTime)
         #expect(undatedDraft.dueDate >= before.addingTimeInterval(3599))
         #expect(undatedDraft.dueDate <= after.addingTimeInterval(3601))
+    }
+
+    @Test("Time requires Date and disabling Date also disables Time")
+    func dueToggleInvariants() {
+        let events = FakeReminderEventStore()
+        let reminder = events.makeReminder(
+            title: "Call",
+            calendar: events.makeCalendar(title: "Inbox")
+        )
+        var draft = ReminderDraft(reminder: reminder)
+
+        draft.setDueTimeEnabled(true)
+        #expect(draft.hasDueDate)
+        #expect(draft.hasDueTime)
+        #expect(draft.dueMode == .dateAndTime)
+
+        draft.setDueDateEnabled(false)
+        #expect(!draft.hasDueDate)
+        #expect(!draft.hasDueTime)
+        #expect(draft.dueMode == .none)
+
+        draft.setDueDateEnabled(true)
+        #expect(draft.hasDueDate)
+        #expect(!draft.hasDueTime)
+        #expect(draft.dueMode == .dateOnly)
     }
 }

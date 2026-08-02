@@ -9,16 +9,31 @@ extension EKReminder {
     }
 
     var notchDueMetadata: ReminderDueMetadata? {
-        notchDueMetadata(relativeTo: Date(), calendar: .autoupdatingCurrent)
+        notchDueMetadata(mode: nil, relativeTo: Date(), calendar: .autoupdatingCurrent)
+    }
+
+    func notchDueMetadata(mode: ReminderDueMode) -> ReminderDueMetadata? {
+        notchDueMetadata(mode: mode, relativeTo: Date(), calendar: .autoupdatingCurrent)
     }
 
     func notchDueMetadata(
         relativeTo now: Date,
         calendar: Calendar
     ) -> ReminderDueMetadata? {
-        guard let dueDate = notchDueDate else { return nil }
+        notchDueMetadata(mode: nil, relativeTo: now, calendar: calendar)
+    }
 
-        let includesTime = dueDateComponents?.hour != nil
+    func notchDueMetadata(
+        mode: ReminderDueMode?,
+        relativeTo now: Date,
+        calendar: Calendar
+    ) -> ReminderDueMetadata? {
+        guard let components = dueDateComponents,
+              let dueDate = notchDueDate else { return nil }
+
+        let resolvedMode = mode ?? ReminderDueMode(components: components)
+        let includesDate = resolvedMode.hasDate
+        let includesTime = resolvedMode.hasTime
         let dayText: String
 
         if calendar.isDate(dueDate, inSameDayAs: now) {
@@ -31,10 +46,12 @@ extension EKReminder {
         }
 
         let text: String
-        if includesTime {
+        if includesDate && includesTime {
             text = "\(dayText), \(dueDate.formatted(date: .omitted, time: .shortened))"
-        } else {
+        } else if includesDate {
             text = dayText
+        } else {
+            text = dueDate.formatted(date: .omitted, time: .shortened)
         }
 
         let overdueBoundary = includesTime ? now : calendar.startOfDay(for: now)

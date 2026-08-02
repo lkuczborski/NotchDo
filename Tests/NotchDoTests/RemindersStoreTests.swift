@@ -1,4 +1,5 @@
 import EventKit
+import Foundation
 import Testing
 @testable import NotchDo
 
@@ -122,6 +123,45 @@ struct RemindersStoreTests {
         #expect(store.calendars.map(\.title) == ["Personal", "Work"])
         #expect(store.selectedCalendar === work)
         #expect(events.fetchCount == fetchesAfterStart + 2)
+    }
+
+    @Test("The last selected calendar is restored by a new store")
+    func calendarSelectionPersistence() async {
+        let defaultsSuite = "NotchDoTests.calendarSelection.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsSuite)!
+        defer { defaults.removePersistentDomain(forName: defaultsSuite) }
+
+        let firstEvents = FakeReminderEventStore()
+        let firstInbox = firstEvents.makeCalendar(title: "Inbox")
+        let firstWork = firstEvents.makeCalendar(title: "Work")
+        firstEvents.calendarsStub = [firstInbox, firstWork]
+        firstEvents.defaultCalendarStub = firstInbox
+
+        let firstStore = RemindersStore(
+            eventStore: firstEvents,
+            userDefaults: defaults
+        )
+        await firstStore.start()
+        firstStore.selectCalendar(firstWork.calendarIdentifier)
+
+        #expect(
+            defaults.string(
+                forKey: RemindersStore.selectedCalendarIdentifierDefaultsKey
+            ) == firstWork.calendarIdentifier
+        )
+
+        let relaunchedEvents = FakeReminderEventStore()
+        relaunchedEvents.calendarsStub = [firstInbox, firstWork]
+        relaunchedEvents.defaultCalendarStub = firstInbox
+        let relaunchedStore = RemindersStore(
+            eventStore: relaunchedEvents,
+            userDefaults: defaults
+        )
+
+        await relaunchedStore.start()
+
+        #expect(relaunchedStore.selectedCalendarIdentifier == firstWork.calendarIdentifier)
+        #expect(relaunchedStore.selectedCalendarTitle == "Work")
     }
 
     @Test(
@@ -393,8 +433,8 @@ struct RemindersStoreTests {
         draft.title = "  Updated  "
         draft.notes = " \n "
         draft.hasDueDate = true
+        draft.hasDueTime = true
         draft.dueDate = fixedDate(2026, 9, 12, hour: 16, minute: 45)
-        draft.isAllDay = false
         draft.priority = .high
         draft.recurrence = .custom
 
@@ -422,8 +462,11 @@ struct RemindersStoreTests {
         #expect(store.syncState == .synced)
     }
 
-    @Test("All-day update omits time; disabling due date and recurrence clears both")
+    @Test("Date-only updates omit time; disabling due values and recurrence clears both")
     func dueDateAndRecurrenceClearing() async {
+        let defaultsSuite = "NotchDoTests.dueMode.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsSuite)!
+        defer { defaults.removePersistentDomain(forName: defaultsSuite) }
         let events = FakeReminderEventStore()
         let inbox = events.makeCalendar(title: "Inbox")
         events.calendarsStub = [inbox]
@@ -436,13 +479,13 @@ struct RemindersStoreTests {
             EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil)
         ]
         events.fetchedReminders = [reminder]
-        let store = RemindersStore(eventStore: events)
+        let store = RemindersStore(eventStore: events, userDefaults: defaults)
         await store.start()
 
         var draft = ReminderDraft(reminder: reminder)
         draft.hasDueDate = true
+        draft.hasDueTime = false
         draft.dueDate = fixedDate(2026, 10, 2, hour: 22, minute: 10)
-        draft.isAllDay = true
         draft.recurrence = .monthly
         await store.update(reminder, with: draft, fields: [.dueDate, .recurrence])
         var localCalendar = Calendar(identifier: .gregorian)
@@ -459,9 +502,11 @@ struct RemindersStoreTests {
         #expect(reminder.recurrenceRules?.first?.frequency == .monthly)
 
         draft.hasDueDate = false
+        draft.hasDueTime = false
         draft.recurrence = .never
         await store.update(reminder, with: draft, fields: [.dueDate, .recurrence])
         #expect(reminder.dueDateComponents == nil)
+        #expect(store.dueMode(for: reminder) == .none)
         #expect(reminder.recurrenceRules?.isEmpty != false)
     }
 
@@ -516,6 +561,7 @@ struct RemindersStoreTests {
         draft.title = "Changed"
         draft.notes = "Changed notes"
         draft.hasDueDate = false
+        draft.hasDueTime = false
         draft.priority = .high
         draft.recurrence = .daily
         await store.update(
