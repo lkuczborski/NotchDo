@@ -1,5 +1,10 @@
 # NotchDo
 
+[![Release](https://img.shields.io/github/v/release/lkuczborski/NotchDo?style=flat-square&label=release&color=18181b)](https://github.com/lkuczborski/NotchDo/releases/latest)
+![macOS](https://img.shields.io/badge/macOS-14%2B-18181b?style=flat-square)
+![Swift](https://img.shields.io/badge/Swift-6.2%2B-f05138?style=flat-square)
+[![License](https://img.shields.io/badge/license-MIT-7c5cff?style=flat-square)](LICENSE)
+
 <p align="center">
   <img src="docs/assets/notchdo-icon-readme.png" alt="NotchDo app icon" width="180">
 </p>
