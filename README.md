@@ -113,3 +113,12 @@ script/         Development and distribution workflows
 ## License
 
 NotchDo is available under the [MIT License](LICENSE).
+
+## Acknowledgements
+
+NotchDo's animatable notch silhouette adapts the path geometry from
+[DynamicNotchKit](https://github.com/MrKai77/DynamicNotchKit) by Kai Azim,
+used under the MIT License. NotchDo adds radius validation and integrates the
+shape into its own layout and animation system. The complete upstream
+copyright and license text is included in
+[Third-Party Notices](THIRD_PARTY_NOTICES.md).

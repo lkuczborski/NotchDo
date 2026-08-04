@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Path geometry adapted from DynamicNotchKit's NotchShape by Kai Azim.
+// Used under the MIT License; see THIRD_PARTY_NOTICES.md.
 /// A simple notch silhouette whose corner geometry remains explicit and
 /// continuously animatable as the visible surface changes size.
 struct NotchSurfaceShape: Shape {

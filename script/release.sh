@@ -104,6 +104,7 @@ INFO_PLIST_SOURCE="$ROOT_DIR/Support/Info.plist"
 ENTITLEMENTS="$ROOT_DIR/Support/NotchDo.entitlements"
 ICON_SOURCE="$ROOT_DIR/Support/NotchDo.icns"
 LICENSE_SOURCE="$ROOT_DIR/LICENSE"
+THIRD_PARTY_NOTICES_SOURCE="$ROOT_DIR/THIRD_PARTY_NOTICES.md"
 RELEASE_ROOT="$ROOT_DIR/dist/release"
 STAGE_ROOT="$RELEASE_ROOT/$VERSION"
 PACKAGE_NAME="$APP_NAME-$VERSION-macos-universal"
@@ -181,7 +182,9 @@ cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$INFO_PLIST_SOURCE" "$APP_CONTENTS/Info.plist"
 cp "$ICON_SOURCE" "$APP_RESOURCES/NotchDo.icns"
 cp "$LICENSE_SOURCE" "$APP_RESOURCES/LICENSE"
+cp "$THIRD_PARTY_NOTICES_SOURCE" "$APP_RESOURCES/THIRD_PARTY_NOTICES.md"
 cp "$LICENSE_SOURCE" "$PACKAGE_DIR/LICENSE"
+cp "$THIRD_PARTY_NOTICES_SOURCE" "$PACKAGE_DIR/THIRD_PARTY_NOTICES.md"
 chmod +x "$APP_BINARY"
 plutil -lint "$APP_CONTENTS/Info.plist" "$ENTITLEMENTS" >/dev/null
 
@@ -226,9 +229,14 @@ VERIFY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/notchdo-release-verify.XXXXXX")"
 TEMP_PATHS+=("$VERIFY_DIR")
 ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
 EXTRACTED_APP="$VERIFY_DIR/$PACKAGE_NAME/$APP_NAME.app"
+EXTRACTED_PACKAGE="$VERIFY_DIR/$PACKAGE_NAME"
 codesign --verify --deep --strict --verbose=2 "$EXTRACTED_APP"
 xcrun stapler validate "$EXTRACTED_APP"
 spctl --assess --type execute --verbose=4 "$EXTRACTED_APP"
+[[ -f "$EXTRACTED_APP/Contents/Resources/THIRD_PARTY_NOTICES.md" ]] \
+    || die "packaged app is missing THIRD_PARTY_NOTICES.md"
+[[ -f "$EXTRACTED_PACKAGE/THIRD_PARTY_NOTICES.md" ]] \
+    || die "release package is missing THIRD_PARTY_NOTICES.md"
 
 cat <<EOF
 Release package ready:

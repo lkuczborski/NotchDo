@@ -34,6 +34,7 @@ mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$ROOT_DIR/Support/Info.plist" "$APP_CONTENTS/Info.plist"
 cp "$ROOT_DIR/Support/NotchDo.icns" "$APP_RESOURCES/NotchDo.icns"
+cp "$ROOT_DIR/THIRD_PARTY_NOTICES.md" "$APP_RESOURCES/THIRD_PARTY_NOTICES.md"
 chmod +x "$APP_BINARY"
 codesign \
     --force \
