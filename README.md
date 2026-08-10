@@ -37,6 +37,10 @@ cloud service, analytics pipeline, or separate task database.
 - Escape and outside clicks collapse the active editor; scrolling leaves it open
 - Purpose-built permission, loading, empty, and error states
 
+<p align="center">
+  <img src="docs/assets/notchdo-screenshot.jpeg" alt="NotchDo showing Apple Reminders beneath the MacBook notch" width="960">
+</p>
+
 ## Requirements
 
 - macOS 14 Sonoma or later
