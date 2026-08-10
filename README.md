@@ -17,7 +17,7 @@ NotchDo uses Apple Reminders directly through EventKit. It has no account,
 cloud service, analytics pipeline, or separate task database.
 
 <p align="center">
-  <img src="docs/assets/notchdo-demo.webp" alt="NotchDo expanding from the MacBook notch to manage reminders" width="640">
+  <img src="docs/assets/notchdo-demo.gif" alt="NotchDo expanding from the MacBook notch to manage reminders" width="640">
 </p>
 
 ## Highlights
