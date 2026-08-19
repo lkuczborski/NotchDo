@@ -603,6 +603,12 @@ struct RemindersStoreTests {
         let inbox = events.makeCalendar(title: "Inbox")
         events.calendarsStub = [inbox]
         let reminder = events.makeReminder(title: "Delete me", calendar: inbox)
+        let recurrenceRule = EKRecurrenceRule(
+            recurrenceWith: .daily,
+            interval: 1,
+            end: nil
+        )
+        reminder.recurrenceRules = [recurrenceRule]
         events.fetchedReminders = [reminder]
         let store = RemindersStore(eventStore: events)
         await store.start()
@@ -610,6 +616,7 @@ struct RemindersStoreTests {
         events.removeError = TestFailure.requested
         await store.delete(reminder)
         #expect(store.reminders.contains { $0 === reminder })
+        #expect(reminder.recurrenceRules?.first === recurrenceRule)
         #expect(events.removedReminders.isEmpty)
         guard case .failed = store.syncState else {
             Issue.record("A remove error should be surfaced")
