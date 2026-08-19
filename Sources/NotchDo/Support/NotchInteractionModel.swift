@@ -6,6 +6,7 @@ final class NotchInteractionModel: ObservableObject {
     @Published private(set) var isExpanded = false
 
     var onExpansionChange: ((Bool) -> Void)?
+    var onInteraction: (() -> Void)?
 
     private(set) var isPointerInside = false
     private var hasTransientInteraction = false
@@ -17,10 +18,15 @@ final class NotchInteractionModel: ObservableObject {
 
         if isInside {
             transientDismissWorkItem?.cancel()
+            onInteraction?()
             expand()
         } else if !hasTransientInteraction {
             collapse()
         }
+    }
+
+    func registerInteraction() {
+        onInteraction?()
     }
 
     func updateTransientInteraction(_ isActive: Bool) {
