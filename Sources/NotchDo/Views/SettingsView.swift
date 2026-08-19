@@ -79,7 +79,6 @@ struct SettingsView: View {
         }
         .padding(24)
         .frame(width: 420)
-        .navigationTitle("Settings")
         .onAppear {
             launchAtLogin.refresh()
         }
