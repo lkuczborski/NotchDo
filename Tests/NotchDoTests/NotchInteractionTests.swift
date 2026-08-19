@@ -8,18 +8,34 @@ struct NotchInteractionTests {
     func pointerTransitions() {
         let model = NotchInteractionModel()
         var changes: [Bool] = []
+        var interactionCount = 0
         model.onExpansionChange = { changes.append($0) }
+        model.onInteraction = { interactionCount += 1 }
 
         model.updatePointerInside(true)
         model.updatePointerInside(true)
         #expect(model.isPointerInside)
         #expect(model.isExpanded)
         #expect(changes == [true])
+        #expect(interactionCount == 1)
 
         model.updatePointerInside(false)
         #expect(!model.isPointerInside)
         #expect(!model.isExpanded)
         #expect(changes == [true, false])
+    }
+
+    @Test("Expanded panel interactions emit an authorization refresh hook")
+    func expandedPanelInteraction() {
+        let model = NotchInteractionModel()
+        var interactionCount = 0
+        model.onInteraction = { interactionCount += 1 }
+
+        model.updatePointerInside(true)
+        model.registerInteraction()
+
+        #expect(model.isExpanded)
+        #expect(interactionCount == 2)
     }
 
     @Test("Transient interaction prevents premature collapse")

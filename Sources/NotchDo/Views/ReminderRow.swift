@@ -6,6 +6,7 @@ struct ReminderRow: View {
     let reminder: EKReminder
     let calendarColor: Color
     let dueMode: ReminderDueMode
+    let isEditable: Bool
     @Binding var isExpanded: Bool
     let onTransientInteraction: (Bool) -> Void
     let isReminderPresent: () -> Bool
@@ -22,6 +23,7 @@ struct ReminderRow: View {
         reminder: EKReminder,
         calendarColor: Color,
         dueMode: ReminderDueMode,
+        isEditable: Bool,
         isExpanded: Binding<Bool>,
         onTransientInteraction: @escaping (Bool) -> Void,
         isReminderPresent: @escaping () -> Bool,
@@ -34,6 +36,7 @@ struct ReminderRow: View {
         self.reminder = reminder
         self.calendarColor = calendarColor
         self.dueMode = dueMode
+        self.isEditable = isEditable
         _isExpanded = isExpanded
         self.onTransientInteraction = onTransientInteraction
         self.isReminderPresent = isReminderPresent
@@ -48,6 +51,7 @@ struct ReminderRow: View {
 
             if isExpanded {
                 editor
+                    .disabled(!isEditable)
             }
         }
         .background(
@@ -62,7 +66,9 @@ struct ReminderRow: View {
         .padding(.vertical, 3)
         .contentShape(Rectangle())
         .contextMenu {
-            quickScheduleActions
+            if isEditable {
+                quickScheduleActions
+            }
         }
         .onChange(of: isExpanded) { _, rowIsExpanded in
             guard !rowIsExpanded else { return }
@@ -87,6 +93,7 @@ struct ReminderRow: View {
                     .foregroundStyle(.white.opacity(0.94))
                     .frame(height: 22)
                     .focused($titleFocused)
+                    .disabled(!isEditable)
                     .accessibilityLabel("Reminder title")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,20 +114,26 @@ struct ReminderRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(displayTitle)
-                .accessibilityHint("Opens reminder details for editing")
+                .accessibilityHint(
+                    isEditable
+                        ? "Opens reminder details for editing"
+                        : "Shows reminder details; this list is read-only"
+                )
                 .accessibilityActions {
-                    Button("Schedule for Today") {
-                        applyQuickSchedule(.today)
-                    }
-                    Button("Schedule for Tomorrow") {
-                        applyQuickSchedule(.tomorrow)
-                    }
-                    Button("Schedule for Next Week") {
-                        applyQuickSchedule(.nextWeek)
-                    }
-                    if quickScheduleDueMode != .none {
-                        Button("Clear Due Date") {
-                            applyQuickSchedule(.clearDate)
+                    if isEditable {
+                        Button("Schedule for Today") {
+                            applyQuickSchedule(.today)
+                        }
+                        Button("Schedule for Tomorrow") {
+                            applyQuickSchedule(.tomorrow)
+                        }
+                        Button("Schedule for Next Week") {
+                            applyQuickSchedule(.nextWeek)
+                        }
+                        if quickScheduleDueMode != .none {
+                            Button("Clear Due Date") {
+                                applyQuickSchedule(.clearDate)
+                            }
                         }
                     }
                 }
@@ -253,11 +266,19 @@ struct ReminderRow: View {
                     .foregroundStyle(.black.opacity(0.72))
                     .transition(.scale.combined(with: .opacity))
             }
+
+            if !isEditable {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
         }
         .frame(width: 22, height: 22)
         .contentShape(Circle())
         .onTapGesture(perform: complete)
+        .allowsHitTesting(isEditable)
         .accessibilityElement(children: .ignore)
+        .accessibilityHidden(!isEditable)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Complete \(displayTitle)")
         .accessibilityAction {
@@ -378,6 +399,7 @@ struct ReminderRow: View {
     }
 
     private func applyQuickSchedule(_ schedule: ReminderQuickSchedule) {
+        guard isEditable else { return }
         draft.reconcileDueFields(
             from: reminder,
             preservingLocalEdits: pendingFields.contains(.dueDate)
@@ -460,7 +482,7 @@ struct ReminderRow: View {
     }
 
     private func complete() {
-        guard !isCompleting else { return }
+        guard isEditable, !isCompleting else { return }
         flushPendingSave()
         withAnimation(.smooth(duration: 0.16, extraBounce: 0)) {
             isCompleting = true

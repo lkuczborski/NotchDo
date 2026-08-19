@@ -12,8 +12,64 @@ struct ReminderListView: View {
     @State private var menuTracking = NotchMenuTrackingState()
     @State private var scrollIndicatorTrigger = 0
     @State private var revealTask: Task<Void, Never>?
+    @State private var deletionConfirmation = ReminderDeletionConfirmation()
 
     var body: some View {
+        listContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: isPanelExpanded) { _, panelIsExpanded in
+                if !panelIsExpanded {
+                    collapseExpandedReminder()
+                }
+            }
+            .onChange(of: store.reminders.map(\.calendarItemIdentifier)) {
+                _, identifiers in
+                deletionConfirmation.cancelIfReminderIsMissing(from: identifiers)
+                guard let expandedReminderIdentifier,
+                      !identifiers.contains(expandedReminderIdentifier) else { return }
+                self.expandedReminderIdentifier = nil
+            }
+            .onChange(of: collapseRequest) { _, _ in
+                collapseExpandedReminder()
+            }
+            .onChange(of: deletionConfirmation.pendingReminder != nil) {
+                _, _ in
+                reportTransientInteraction()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
+            ) { _ in
+                if menuTracking.beginTracking() {
+                    reportTransientInteraction()
+                }
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)
+            ) { _ in
+                if menuTracking.endTracking() {
+                    reportTransientInteraction()
+                }
+            }
+            .onExitCommand {
+                collapseExpandedReminder()
+            }
+            .deleteConfirmationAlert(
+                isPresented: isDeleteConfirmationPresented,
+                reminder: deletionConfirmation.pendingReminder,
+                onDelete: confirmReminderDeletion,
+                onCancel: deletionConfirmation.cancelDeletion
+            )
+            .onDisappear {
+                revealTask?.cancel()
+                revealTask = nil
+                deletionConfirmation.cancelDeletion()
+                _ = menuTracking.reset()
+                reportTransientInteraction()
+            }
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
         Group {
             if store.reminders.isEmpty {
                 emptyState
@@ -67,51 +123,15 @@ struct ReminderListView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: isPanelExpanded) { _, panelIsExpanded in
-            if !panelIsExpanded {
-                collapseExpandedReminder()
-            }
-        }
-        .onChange(of: store.reminders.map(\.calendarItemIdentifier)) { _, identifiers in
-            guard let expandedReminderIdentifier,
-                  !identifiers.contains(expandedReminderIdentifier) else { return }
-            self.expandedReminderIdentifier = nil
-        }
-        .onChange(of: collapseRequest) { _, _ in
-            collapseExpandedReminder()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
-        ) { _ in
-            if menuTracking.beginTracking() {
-                onTransientInteraction(true)
-            }
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)
-        ) { _ in
-            if menuTracking.endTracking() {
-                onTransientInteraction(false)
-            }
-        }
-        .onExitCommand {
-            collapseExpandedReminder()
-        }
-        .onDisappear {
-            revealTask?.cancel()
-            revealTask = nil
-            if menuTracking.reset() {
-                onTransientInteraction(false)
-            }
-        }
     }
 
     private func reminderCell(_ reminder: EKReminder, isLast: Bool) -> some View {
-        ReminderRow(
+        let isEditable = store.canModify(reminder)
+        return ReminderRow(
             reminder: reminder,
             calendarColor: store.selectedCalendarColor,
             dueMode: store.dueMode(for: reminder),
+            isEditable: isEditable,
             isExpanded: expansionBinding(for: reminder.calendarItemIdentifier),
             onTransientInteraction: onTransientInteraction,
             isReminderPresent: {
@@ -138,6 +158,7 @@ struct ReminderListView: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .disabled(!isEditable)
             }
     }
 
@@ -185,7 +206,34 @@ struct ReminderListView: View {
     }
 
     private func deleteReminder(_ reminder: EKReminder) {
+        guard deletionConfirmation.requestDeletion(of: reminder) else { return }
+        performDeletion(of: reminder)
+    }
+
+    private func confirmReminderDeletion(_ reminder: EKReminder) {
+        _ = deletionConfirmation.confirmDeletion()
+        performDeletion(of: reminder)
+    }
+
+    private func performDeletion(of reminder: EKReminder) {
         Task { await store.delete(reminder) }
+    }
+
+    private func reportTransientInteraction() {
+        onTransientInteraction(
+            menuTracking.isTracking || deletionConfirmation.pendingReminder != nil
+        )
+    }
+
+    private var isDeleteConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { deletionConfirmation.pendingReminder != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deletionConfirmation.cancelDeletion()
+                }
+            }
+        )
     }
 
     private var emptyState: some View {

@@ -26,6 +26,7 @@ cloud service, analytics pipeline, or separate task database.
   Spaces
 - Immediate hover expansion with a compositor-friendly, continuously rounded
   transition
+- Immediately add new reminder after hover, you can start typing right away
 - List-colored open-task indicator that transitions into the expanded header
 - Apple Reminders list selection, list creation, and automatic external-change
   refresh

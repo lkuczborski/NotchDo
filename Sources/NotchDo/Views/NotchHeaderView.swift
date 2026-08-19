@@ -11,6 +11,7 @@ struct NotchHeaderView: View {
     @State private var isOptionsPresented = false
     @State private var isCreateListPresented = false
     @State private var newListTitle = ""
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -174,6 +175,12 @@ struct NotchHeaderView: View {
             optionButton("Open Reminders", systemImage: "arrow.up.forward.app") {
                 isOptionsPresented = false
                 AppActions.openReminders()
+            }
+
+            optionButton("Settings…", systemImage: "gearshape") {
+                isOptionsPresented = false
+                openSettings()
+                NSApp.activate(ignoringOtherApps: true)
             }
 
             Divider()
