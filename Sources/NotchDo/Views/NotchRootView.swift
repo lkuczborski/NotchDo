@@ -85,6 +85,19 @@ struct NotchRootView: View {
             content
 
             if store.authorization == .fullAccess {
+                if let reminder = store.recentlyCompletedReminder {
+                    CompletionUndoView(
+                        reminderTitle: reminder.title,
+                        color: store.selectedCalendarColor,
+                        onUndo: undoRecentCompletion
+                    )
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .move(edge: .bottom).combined(with: .opacity)
+                    )
+                }
+
                 if store.selectedCalendarIsWritable {
                     ComposerView(
                         store: store,
@@ -99,6 +112,10 @@ struct NotchRootView: View {
         .padding(.horizontal, 26)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(
+            reduceMotion ? .easeOut(duration: 0.1) : .smooth(duration: 0.2, extraBounce: 0),
+            value: store.recentlyCompletedReminder?.calendarItemIdentifier
+        )
     }
 
     private var taskCountBadge: some View {
@@ -182,6 +199,10 @@ struct NotchRootView: View {
 
     private func collapseReminderRows() {
         rowCollapseRequest &+= 1
+    }
+
+    private func undoRecentCompletion() {
+        Task { await store.undoRecentCompletion() }
     }
 }
 

@@ -449,6 +449,33 @@ struct RemindersStoreTests {
         #expect(store.reminders.first === reminder)
     }
 
+    @Test("Authorization revocation dismisses a completion undo")
+    func authorizationRevocationDismissesCompletionUndo() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let reminder = events.makeReminder(title: "Complete", calendar: inbox)
+        events.calendarsStub = [inbox]
+        events.defaultCalendarStub = inbox
+        events.fetchedReminders = [reminder]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        #expect(await store.setCompleted(reminder))
+        #expect(store.recentlyCompletedReminder === reminder)
+
+        events.authorizationStatusStub = .denied
+        await store.refreshAuthorization()
+
+        #expect(store.authorization == .denied)
+        #expect(store.selectedCalendar == nil)
+        #expect(store.recentlyCompletedReminder == nil)
+        #expect(!(await store.undoRecentCompletion()))
+        sleeper.resumeAll()
+    }
+
     @Test("Writability is evaluated per reminder calendar")
     func reminderCalendarWritability() async {
         let events = FakeReminderEventStore()
@@ -496,6 +523,273 @@ struct RemindersStoreTests {
         #expect(first.isCompleted)
         #expect(!store.reminders.contains { $0 === first })
         #expect(events.savedReminders.last === first)
+        #expect(store.recentlyCompletedReminder === first)
+    }
+
+    @Test("Undo restores the same reminder in EventKit order")
+    func completionUndo() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        events.calendarsStub = [inbox]
+        let first = events.makeReminder(title: "First", calendar: inbox)
+        let second = events.makeReminder(title: "Second", calendar: inbox)
+        events.fetchedReminders = [first, second]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+
+        #expect(await store.setCompleted(first))
+        #expect(store.recentlyCompletedReminder === first)
+        #expect(await store.undoRecentCompletion())
+
+        #expect(!first.isCompleted)
+        #expect(store.recentlyCompletedReminder == nil)
+        #expect(store.reminders.count == 2)
+        #expect(store.reminders[0] === first)
+        #expect(store.reminders[1] === second)
+        #expect(events.savedReminders.count == 2)
+        #expect(events.savedReminders.allSatisfy { $0 === first })
+        sleeper.resumeAll()
+    }
+
+    @Test("Completion undo expires when its injected delay elapses")
+    func completionUndoExpiry() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        events.calendarsStub = [inbox]
+        let reminder = events.makeReminder(title: "Soon gone", calendar: inbox)
+        events.fetchedReminders = [reminder]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoDuration: .seconds(5),
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        #expect(await store.setCompleted(reminder))
+        for _ in 0..<10 where sleeper.pendingCount == 0 {
+            await Task.yield()
+        }
+
+        #expect(sleeper.pendingCount == 1)
+        sleeper.resumeNext()
+        for _ in 0..<10 where store.recentlyCompletedReminder != nil {
+            await Task.yield()
+        }
+        #expect(store.recentlyCompletedReminder == nil)
+        #expect(!(await store.undoRecentCompletion()))
+    }
+
+    @Test("A failed undo rolls back to completed and surfaces the error")
+    func completionUndoFailure() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        events.calendarsStub = [inbox]
+        let reminder = events.makeReminder(title: "Keep completed", calendar: inbox)
+        events.fetchedReminders = [reminder]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        #expect(await store.setCompleted(reminder))
+
+        events.saveError = TestFailure.requested
+        #expect(!(await store.undoRecentCompletion()))
+
+        #expect(reminder.isCompleted)
+        #expect(store.reminders.isEmpty)
+        #expect(store.recentlyCompletedReminder == nil)
+        guard case .failed = store.syncState else {
+            Issue.record("An undo save error should be surfaced")
+            sleeper.resumeAll()
+            return
+        }
+        sleeper.resumeAll()
+    }
+
+    @Test("Rapid completions keep only the newest undo and ignore the older timeout")
+    func rapidCompletionUndoReplacement() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        events.calendarsStub = [inbox]
+        let first = events.makeReminder(title: "First", calendar: inbox)
+        let second = events.makeReminder(title: "Second", calendar: inbox)
+        events.fetchedReminders = [first, second]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+
+        #expect(await store.setCompleted(first))
+        for _ in 0..<10 where sleeper.pendingCount == 0 {
+            await Task.yield()
+        }
+        #expect(await store.setCompleted(second))
+        for _ in 0..<10 where sleeper.pendingCount < 2 {
+            await Task.yield()
+        }
+
+        #expect(store.recentlyCompletedReminder === second)
+        sleeper.resumeNext()
+        await Task.yield()
+        #expect(store.recentlyCompletedReminder === second)
+
+        #expect(await store.undoRecentCompletion())
+        #expect(first.isCompleted)
+        #expect(!second.isCompleted)
+        #expect(store.reminders.count == 1)
+        #expect(store.reminders.first === second)
+        sleeper.resumeAll()
+    }
+
+    @Test("Out-of-order completion reloads cannot replace the newest undo")
+    func outOfOrderCompletionReloads() async throws {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        events.calendarsStub = [inbox]
+        let first = events.makeReminder(title: "First", calendar: inbox)
+        let second = events.makeReminder(title: "Second", calendar: inbox)
+        events.fetchedReminders = [first, second]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        events.completesFetchImmediately = false
+
+        let firstCompletion = Task { await store.setCompleted(first) }
+        for _ in 0..<10 where events.pendingFetchCompletions.count < 1 {
+            await Task.yield()
+        }
+        let secondCompletion = Task { await store.setCompleted(second) }
+        for _ in 0..<10 where events.pendingFetchCompletions.count < 2 {
+            await Task.yield()
+        }
+        let firstReload = try #require(events.pendingFetchCompletions.first)
+        let secondReload = try #require(events.pendingFetchCompletions.dropFirst().first)
+
+        secondReload([first, second])
+        #expect(await secondCompletion.value)
+        #expect(store.recentlyCompletedReminder === second)
+
+        firstReload([first, second])
+        #expect(await firstCompletion.value)
+        #expect(store.recentlyCompletedReminder === second)
+        sleeper.resumeAll()
+    }
+
+    @Test("A pending completion cannot recreate undo after switching lists")
+    func completionReloadAfterListSwitch() async throws {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let work = events.makeCalendar(title: "Work")
+        let inboxReminder = events.makeReminder(title: "Inbox task", calendar: inbox)
+        let workReminder = events.makeReminder(title: "Work task", calendar: work)
+        events.calendarsStub = [inbox, work]
+        events.defaultCalendarStub = inbox
+        events.fetchedReminders = [inboxReminder]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        events.completesFetchImmediately = false
+
+        let completion = Task { await store.setCompleted(inboxReminder) }
+        for _ in 0..<10 where events.pendingFetchCompletions.count < 1 {
+            await Task.yield()
+        }
+        store.selectCalendar(work.calendarIdentifier)
+        for _ in 0..<10 where events.pendingFetchCompletions.count < 2 {
+            await Task.yield()
+        }
+
+        let completionReload = try #require(events.pendingFetchCompletions.first)
+        let selectedListReload = try #require(
+            events.pendingFetchCompletions.dropFirst().first
+        )
+        completionReload([inboxReminder])
+        #expect(await completion.value)
+        #expect(store.selectedCalendar === work)
+        #expect(store.recentlyCompletedReminder == nil)
+
+        selectedListReload([workReminder])
+        for _ in 0..<10 where store.reminders.first !== workReminder {
+            await Task.yield()
+        }
+        #expect(store.reminders.first === workReminder)
+        #expect(store.recentlyCompletedReminder == nil)
+        sleeper.resumeAll()
+    }
+
+    @Test("Creating a list dismisses undo from the previously selected list")
+    func newListDismissesCompletionUndo() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        events.calendarsStub = [inbox]
+        let reminder = events.makeReminder(title: "Completed", calendar: inbox)
+        events.fetchedReminders = [reminder]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        #expect(await store.setCompleted(reminder))
+        #expect(store.recentlyCompletedReminder === reminder)
+
+        #expect(await store.createCalendar(title: "Projects"))
+
+        #expect(store.selectedCalendarTitle == "Projects")
+        #expect(store.recentlyCompletedReminder == nil)
+        #expect(!(await store.undoRecentCompletion()))
+        sleeper.resumeAll()
+    }
+
+    @Test("Fallback calendar selection dismisses undo from a removed list")
+    func fallbackListDismissesCompletionUndo() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let work = events.makeCalendar(title: "Work")
+        events.calendarsStub = [inbox, work]
+        events.defaultCalendarStub = inbox
+        let inboxReminder = events.makeReminder(title: "Inbox task", calendar: inbox)
+        let workReminder = events.makeReminder(title: "Work task", calendar: work)
+        events.fetchedReminders = [inboxReminder]
+        let sleeper = CompletionUndoTestSleeper()
+        let store = RemindersStore(
+            eventStore: events,
+            completionUndoSleep: sleeper.sleep
+        )
+        await store.start()
+        #expect(await store.setCompleted(inboxReminder))
+        #expect(store.recentlyCompletedReminder === inboxReminder)
+
+        events.calendarsStub = [work]
+        events.defaultCalendarStub = work
+        events.fetchedReminders = [workReminder]
+        let fetchCount = events.fetchCount
+        NotificationCenter.default.post(
+            name: .EKEventStoreChanged,
+            object: events.notificationObject
+        )
+        for _ in 0..<10 where events.fetchCount == fetchCount {
+            await Task.yield()
+        }
+
+        #expect(store.selectedCalendar === work)
+        #expect(store.recentlyCompletedReminder == nil)
+        #expect(store.reminders.first === workReminder)
+        sleeper.resumeAll()
     }
 
     @Test("Rename trims valid titles, ignores empty titles, and restores on failure")
