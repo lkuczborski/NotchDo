@@ -61,6 +61,9 @@ struct ReminderRow: View {
         .tint(calendarColor)
         .padding(.vertical, 3)
         .contentShape(Rectangle())
+        .contextMenu {
+            quickScheduleActions
+        }
         .onChange(of: isExpanded) { _, rowIsExpanded in
             guard !rowIsExpanded else { return }
             flushPendingSave()
@@ -105,6 +108,22 @@ struct ReminderRow: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(displayTitle)
                 .accessibilityHint("Opens reminder details for editing")
+                .accessibilityActions {
+                    Button("Schedule for Today") {
+                        applyQuickSchedule(.today)
+                    }
+                    Button("Schedule for Tomorrow") {
+                        applyQuickSchedule(.tomorrow)
+                    }
+                    Button("Schedule for Next Week") {
+                        applyQuickSchedule(.nextWeek)
+                    }
+                    if draft.dueMode != .none {
+                        Button("Clear Due Date") {
+                            applyQuickSchedule(.clearDate)
+                        }
+                    }
+                }
             }
         }
         .padding(.horizontal, 11)
@@ -130,7 +149,8 @@ struct ReminderRow: View {
                     if draft.hasDueDate {
                         CenteredDateField(
                             selection: draftBinding(\.dueDate, field: .dueDate),
-                            onPresentationChange: onTransientInteraction
+                            onPresentationChange: onTransientInteraction,
+                            onQuickSchedule: applyQuickSchedule
                         )
                     }
                 }
@@ -314,6 +334,21 @@ struct ReminderRow: View {
         }
     }
 
+    @ViewBuilder
+    private var quickScheduleActions: some View {
+        ForEach(ReminderQuickSchedule.allCases) { schedule in
+            if schedule == .clearDate {
+                Divider()
+            }
+            Button {
+                applyQuickSchedule(schedule)
+            } label: {
+                Label(schedule.title, systemImage: schedule.systemImage)
+            }
+            .disabled(schedule == .clearDate && draft.dueMode == .none)
+        }
+    }
+
     private var rowBackgroundColor: Color {
         if isExpanded {
             return calendarColor.opacity(0.115)
@@ -340,6 +375,12 @@ struct ReminderRow: View {
             guard !Task.isCancelled else { return }
             await savePendingFields()
         }
+    }
+
+    private func applyQuickSchedule(_ schedule: ReminderQuickSchedule) {
+        guard schedule != .clearDate || draft.dueMode != .none else { return }
+        schedule.apply(to: &draft)
+        queueSave(.dueDate)
     }
 
     private func draftBinding<Value: Equatable>(
