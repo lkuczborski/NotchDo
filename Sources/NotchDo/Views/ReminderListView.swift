@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct ReminderListView: View {
     let onTransientInteraction: (Bool) -> Void
 
     @State private var expandedReminderIdentifier: String?
+    @State private var menuTracking = NotchMenuTrackingState()
     @State private var scrollIndicatorTrigger = 0
     @State private var revealTask: Task<Void, Never>?
     @State private var deletionConfirmation = ReminderDeletionConfirmation()
@@ -31,8 +33,22 @@ struct ReminderListView: View {
                 collapseExpandedReminder()
             }
             .onChange(of: deletionConfirmation.pendingReminder != nil) {
-                _, isPresented in
-                onTransientInteraction(isPresented)
+                _, _ in
+                reportTransientInteraction()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
+            ) { _ in
+                if menuTracking.beginTracking() {
+                    reportTransientInteraction()
+                }
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)
+            ) { _ in
+                if menuTracking.endTracking() {
+                    reportTransientInteraction()
+                }
             }
             .onExitCommand {
                 collapseExpandedReminder()
@@ -47,7 +63,8 @@ struct ReminderListView: View {
                 revealTask?.cancel()
                 revealTask = nil
                 deletionConfirmation.cancelDeletion()
-                onTransientInteraction(false)
+                _ = menuTracking.reset()
+                reportTransientInteraction()
             }
     }
 
@@ -200,6 +217,12 @@ struct ReminderListView: View {
 
     private func performDeletion(of reminder: EKReminder) {
         Task { await store.delete(reminder) }
+    }
+
+    private func reportTransientInteraction() {
+        onTransientInteraction(
+            menuTracking.isTracking || deletionConfirmation.pendingReminder != nil
+        )
     }
 
     private var isDeleteConfirmationPresented: Binding<Bool> {

@@ -3,6 +3,7 @@ import SwiftUI
 struct CenteredDateField: View {
     @Binding var selection: Date
     let onPresentationChange: (Bool) -> Void
+    let onQuickSchedule: (ReminderQuickSchedule) -> Void
 
     @State private var isPresented = false
 
@@ -44,6 +45,23 @@ struct CenteredDateField: View {
 
     private var datePickerPopover: some View {
         VStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Quick Schedule")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    quickScheduleButton(.today)
+                    quickScheduleButton(.tomorrow)
+                }
+
+                HStack(spacing: 6) {
+                    quickScheduleButton(.nextWeek)
+                    quickScheduleButton(.clearDate)
+                }
+            }
+            .frame(width: 152)
+
             FocuslessGraphicalDatePicker(selection: $selection)
                 .frame(width: 152, height: 154)
 
@@ -58,6 +76,16 @@ struct CenteredDateField: View {
         .padding(10)
         .frame(width: 172)
         .preferredColorScheme(.dark)
+    }
+
+    private func quickScheduleButton(_ schedule: ReminderQuickSchedule) -> some View {
+        Button(schedule.title) {
+            onQuickSchedule(schedule)
+            isPresented = false
+        }
+        .controlSize(.small)
+        .frame(maxWidth: .infinity)
+        .accessibilityHint("Sets or clears the reminder due date")
     }
 
     private var formattedValue: String {

@@ -46,4 +46,15 @@ struct ReminderDraft: Equatable {
             hasDueDate = true
         }
     }
+
+    mutating func reconcileDueFields(
+        from reminder: EKReminder,
+        preservingLocalEdits: Bool
+    ) {
+        guard !preservingLocalEdits else { return }
+        let canonical = ReminderDraft(reminder: reminder)
+        hasDueDate = canonical.hasDueDate
+        hasDueTime = canonical.hasDueTime
+        dueDate = canonical.dueDate
+    }
 }
