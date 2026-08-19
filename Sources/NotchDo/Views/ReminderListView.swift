@@ -22,6 +22,7 @@ struct ReminderListView: View {
             }
             .onChange(of: store.reminders.map(\.calendarItemIdentifier)) {
                 _, identifiers in
+                deletionConfirmation.cancelIfReminderIsMissing(from: identifiers)
                 guard let expandedReminderIdentifier,
                       !identifiers.contains(expandedReminderIdentifier) else { return }
                 self.expandedReminderIdentifier = nil

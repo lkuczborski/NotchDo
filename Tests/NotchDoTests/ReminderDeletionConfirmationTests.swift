@@ -54,4 +54,43 @@ struct ReminderDeletionConfirmationTests {
         #expect(confirmation.pendingReminder == nil)
         #expect(confirmation.confirmDeletion() == nil)
     }
+
+    @Test("Reload cancellation prevents deletion of a reminder that disappeared")
+    func reminderDisappearsDuringConfirmation() {
+        let events = FakeReminderEventStore()
+        let reminder = events.makeReminder(
+            title: "Completed elsewhere",
+            calendar: events.makeCalendar(title: "Inbox")
+        )
+        reminder.recurrenceRules = [
+            EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil)
+        ]
+        let confirmation = ReminderDeletionConfirmation()
+        #expect(!confirmation.requestDeletion(of: reminder))
+
+        confirmation.cancelIfReminderIsMissing(from: [])
+
+        #expect(confirmation.pendingReminder == nil)
+        #expect(confirmation.confirmDeletion() == nil)
+    }
+
+    @Test("Reload preserves confirmation while the reminder remains")
+    func reminderRemainsDuringConfirmation() {
+        let events = FakeReminderEventStore()
+        let reminder = events.makeReminder(
+            title: "Still here",
+            calendar: events.makeCalendar(title: "Inbox")
+        )
+        reminder.recurrenceRules = [
+            EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: nil)
+        ]
+        let confirmation = ReminderDeletionConfirmation()
+        #expect(!confirmation.requestDeletion(of: reminder))
+
+        confirmation.cancelIfReminderIsMissing(
+            from: [reminder.calendarItemIdentifier]
+        )
+
+        #expect(confirmation.pendingReminder === reminder)
+    }
 }

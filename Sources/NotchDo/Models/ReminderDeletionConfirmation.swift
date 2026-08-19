@@ -20,4 +20,10 @@ final class ReminderDeletionConfirmation {
     func cancelDeletion() {
         pendingReminder = nil
     }
+
+    func cancelIfReminderIsMissing(from identifiers: [String]) {
+        guard let pendingReminder,
+              !identifiers.contains(pendingReminder.calendarItemIdentifier) else { return }
+        cancelDeletion()
+    }
 }
