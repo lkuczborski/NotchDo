@@ -118,7 +118,7 @@ struct ReminderRow: View {
                     Button("Schedule for Next Week") {
                         applyQuickSchedule(.nextWeek)
                     }
-                    if draft.dueMode != .none {
+                    if quickScheduleDueMode != .none {
                         Button("Clear Due Date") {
                             applyQuickSchedule(.clearDate)
                         }
@@ -345,7 +345,7 @@ struct ReminderRow: View {
             } label: {
                 Label(schedule.title, systemImage: schedule.systemImage)
             }
-            .disabled(schedule == .clearDate && draft.dueMode == .none)
+            .disabled(schedule == .clearDate && quickScheduleDueMode == .none)
         }
     }
 
@@ -378,9 +378,17 @@ struct ReminderRow: View {
     }
 
     private func applyQuickSchedule(_ schedule: ReminderQuickSchedule) {
+        draft.reconcileDueFields(
+            from: reminder,
+            preservingLocalEdits: pendingFields.contains(.dueDate)
+        )
         guard schedule != .clearDate || draft.dueMode != .none else { return }
         schedule.apply(to: &draft)
         queueSave(.dueDate)
+    }
+
+    private var quickScheduleDueMode: ReminderDueMode {
+        pendingFields.contains(.dueDate) ? draft.dueMode : dueMode
     }
 
     private func draftBinding<Value: Equatable>(

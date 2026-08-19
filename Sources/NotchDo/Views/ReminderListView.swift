@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct ReminderListView: View {
     let onTransientInteraction: (Bool) -> Void
 
     @State private var expandedReminderIdentifier: String?
+    @State private var menuTracking = NotchMenuTrackingState()
     @State private var scrollIndicatorTrigger = 0
     @State private var revealTask: Task<Void, Never>?
 
@@ -79,12 +81,29 @@ struct ReminderListView: View {
         .onChange(of: collapseRequest) { _, _ in
             collapseExpandedReminder()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
+        ) { _ in
+            if menuTracking.beginTracking() {
+                onTransientInteraction(true)
+            }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)
+        ) { _ in
+            if menuTracking.endTracking() {
+                onTransientInteraction(false)
+            }
+        }
         .onExitCommand {
             collapseExpandedReminder()
         }
         .onDisappear {
             revealTask?.cancel()
             revealTask = nil
+            if menuTracking.reset() {
+                onTransientInteraction(false)
+            }
         }
     }
 

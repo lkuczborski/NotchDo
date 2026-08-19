@@ -117,6 +117,60 @@ struct ReminderQuickScheduleTests {
         #expect(!draft.hasDueTime)
     }
 
+    @Test("Scheduling refreshes external due changes but preserves pending local edits")
+    func reconcilesCurrentDueState() {
+        let events = FakeReminderEventStore()
+        let reminderCalendar = events.makeCalendar(title: "Inbox")
+        let reminder = events.makeReminder(title: "Call", calendar: reminderCalendar)
+        var draft = ReminderDraft(reminder: reminder)
+        reminder.dueDateComponents = dueComponents(
+            2026,
+            8,
+            19,
+            hour: 14,
+            minute: 20
+        )
+
+        draft.reconcileDueFields(from: reminder, preservingLocalEdits: false)
+        ReminderQuickSchedule.tomorrow.apply(
+            to: &draft,
+            now: fixedDate(2026, 8, 19, hour: 18),
+            calendar: fixedCalendar()
+        )
+
+        var components = fixedCalendar().dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: draft.dueDate
+        )
+        #expect(draft.dueMode == .dateAndTime)
+        #expect(components.day == 20)
+        #expect(components.hour == 14)
+        #expect(components.minute == 20)
+
+        draft.dueDate = fixedDate(2026, 8, 19, hour: 17, minute: 45)
+        reminder.dueDateComponents = dueComponents(
+            2026,
+            8,
+            19,
+            hour: 8,
+            minute: 10
+        )
+        draft.reconcileDueFields(from: reminder, preservingLocalEdits: true)
+        ReminderQuickSchedule.nextWeek.apply(
+            to: &draft,
+            now: fixedDate(2026, 8, 19, hour: 18),
+            calendar: fixedCalendar()
+        )
+
+        components = fixedCalendar().dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: draft.dueDate
+        )
+        #expect(components.day == 26)
+        #expect(components.hour == 17)
+        #expect(components.minute == 45)
+    }
+
     @Test("A failed quick-schedule save restores the EventKit due date")
     func updateFailureRollsBack() async {
         let events = FakeReminderEventStore()
