@@ -11,6 +11,10 @@ extension EKEventStore: ReminderEventStore {
         EKReminder(eventStore: self)
     }
 
+    func allowsContentModifications(in calendar: EKCalendar) -> Bool {
+        calendar.allowsContentModifications
+    }
+
     func createReminderCalendar(title: String) throws -> EKCalendar {
         let calendar = EKCalendar(for: .reminder, eventStore: self)
         let source = defaultCalendarForNewReminders()?.source

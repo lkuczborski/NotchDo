@@ -7,6 +7,7 @@ protocol ReminderEventStore: AnyObject {
     func authorizationStatus() -> EKAuthorizationStatus
     func requestFullAccessToReminders() async throws -> Bool
     func calendars(for entityType: EKEntityType) -> [EKCalendar]
+    func allowsContentModifications(in calendar: EKCalendar) -> Bool
     func defaultCalendarForNewReminders() -> EKCalendar?
     func predicateForReminders(in calendars: [EKCalendar]?) -> NSPredicate
     func fetchReminders(

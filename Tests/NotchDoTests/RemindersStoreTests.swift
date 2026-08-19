@@ -219,6 +219,59 @@ struct RemindersStoreTests {
         }
     }
 
+    @Test("Authorization refresh recovers after Settings grants access")
+    func authorizationRecovery() async {
+        let events = FakeReminderEventStore()
+        events.authorizationStatusStub = .denied
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+
+        let inbox = events.makeCalendar(title: "Inbox")
+        let reminder = events.makeReminder(title: "Recovered", calendar: inbox)
+        events.authorizationStatusStub = .fullAccess
+        events.calendarsStub = [inbox]
+        events.defaultCalendarStub = inbox
+        events.fetchedReminders = [reminder]
+
+        await store.refreshAuthorization()
+
+        #expect(store.authorization == .fullAccess)
+        #expect(store.selectedCalendar === inbox)
+        #expect(store.reminders.first === reminder)
+        #expect(events.accessRequestCount == 0)
+    }
+
+    @Test("Authorization revocation clears content and invalidates an in-flight reload")
+    func authorizationRevocationDuringReload() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let visible = events.makeReminder(title: "Visible", calendar: inbox)
+        events.calendarsStub = [inbox]
+        events.fetchedReminders = [visible]
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+
+        events.completesFetchImmediately = false
+        let reload = Task { await store.reload() }
+        for _ in 0..<10 where events.pendingFetchCompletions.isEmpty {
+            await Task.yield()
+        }
+        guard let pendingCompletion = events.pendingFetchCompletions.first else {
+            Issue.record("Expected an in-flight EventKit fetch")
+            return
+        }
+
+        events.authorizationStatusStub = .denied
+        await store.refreshAuthorization()
+        pendingCompletion([visible])
+        await reload.value
+
+        #expect(store.authorization == .denied)
+        #expect(store.calendars.isEmpty)
+        #expect(store.reminders.isEmpty)
+        #expect(store.selectedCalendar == nil)
+    }
+
     @Test("Reload treats a nil EventKit fetch result as an empty successful snapshot")
     func nilFetch() async {
         let events = FakeReminderEventStore()
@@ -359,6 +412,59 @@ struct RemindersStoreTests {
         store.clearSyncError()
         #expect(store.syncState == .idle)
         #expect(store.syncErrorMessage == nil)
+    }
+
+    @Test("Read-only calendars stay readable while every reminder mutation is rejected")
+    func readOnlyMutationBoundaries() async {
+        let events = FakeReminderEventStore()
+        let shared = events.makeCalendar(title: "Shared")
+        let reminder = events.makeReminder(title: "Original", calendar: shared)
+        events.calendarsStub = [shared]
+        events.defaultCalendarStub = shared
+        events.fetchedReminders = [reminder]
+        events.readOnlyCalendarIdentifiers = [shared.calendarIdentifier]
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+
+        #expect(store.reminders.first === reminder)
+        #expect(!store.selectedCalendarIsWritable)
+        #expect(!store.canModify(reminder))
+        #expect(await !store.addReminder(title: "Blocked add"))
+        #expect(await !store.setCompleted(reminder))
+        await store.rename(reminder, to: "Blocked rename")
+
+        var draft = ReminderDraft(reminder: reminder)
+        draft.notes = "Blocked notes"
+        let updateResult = await store.update(reminder, with: draft, fields: [.notes])
+        await store.delete(reminder)
+
+        #expect(!updateResult.succeeded)
+        #expect(reminder.title == "Original")
+        #expect(reminder.notes == nil)
+        #expect(!reminder.isCompleted)
+        #expect(events.savedReminders.isEmpty)
+        #expect(events.removedReminders.isEmpty)
+        #expect(store.reminders.first === reminder)
+    }
+
+    @Test("Writability is evaluated per reminder calendar")
+    func reminderCalendarWritability() async {
+        let events = FakeReminderEventStore()
+        let shared = events.makeCalendar(title: "Shared")
+        let personal = events.makeCalendar(title: "Personal")
+        let sharedReminder = events.makeReminder(title: "Shared task", calendar: shared)
+        let personalReminder = events.makeReminder(title: "Personal task", calendar: personal)
+        events.calendarsStub = [shared, personal]
+        events.defaultCalendarStub = shared
+        events.fetchedReminders = [sharedReminder]
+        events.readOnlyCalendarIdentifiers = [shared.calendarIdentifier]
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+
+        #expect(!store.canModify(sharedReminder))
+        #expect(store.canModify(personalReminder))
+        #expect(await store.setCompleted(personalReminder))
+        #expect(events.savedReminders.last === personalReminder)
     }
 
     @Test("Completing is optimistic on success and fully rolls back on save failure")

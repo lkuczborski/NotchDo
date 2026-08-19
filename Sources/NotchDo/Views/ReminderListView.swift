@@ -89,10 +89,12 @@ struct ReminderListView: View {
     }
 
     private func reminderCell(_ reminder: EKReminder, isLast: Bool) -> some View {
-        ReminderRow(
+        let isEditable = store.canModify(reminder)
+        return ReminderRow(
             reminder: reminder,
             calendarColor: store.selectedCalendarColor,
             dueMode: store.dueMode(for: reminder),
+            isEditable: isEditable,
             isExpanded: expansionBinding(for: reminder.calendarItemIdentifier),
             onTransientInteraction: onTransientInteraction,
             isReminderPresent: {
@@ -119,6 +121,7 @@ struct ReminderListView: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .disabled(!isEditable)
             }
     }
 
