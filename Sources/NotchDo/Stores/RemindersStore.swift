@@ -23,6 +23,7 @@ final class RemindersStore: NSObject {
     private let completionUndoDuration: Duration
     private let completionUndoSleep: @MainActor (Duration) async -> Void
     private var reloadGeneration = 0
+    private var completionUndoGeneration = 0
     private var completionUndoExpiryTask: Task<Void, Never>?
 
     override init() {
@@ -111,7 +112,6 @@ final class RemindersStore: NSObject {
 
     func selectCalendar(_ identifier: String) {
         guard calendars.contains(where: { $0.calendarIdentifier == identifier }) else { return }
-        dismissCompletionUndo()
         setSelectedCalendarIdentifier(identifier)
         Task { await reload() }
     }
@@ -145,6 +145,7 @@ final class RemindersStore: NSObject {
     func setCompleted(_ reminder: EKReminder, completed: Bool = true) async -> Bool {
         let previousValue = reminder.isCompleted
         let previousReminders = reminders
+        let calendarIdentifier = reminder.calendar.calendarIdentifier
         reminder.isCompleted = completed
         reminders.removeAll {
             $0.calendarItemIdentifier == reminder.calendarItemIdentifier
@@ -152,8 +153,17 @@ final class RemindersStore: NSObject {
 
         do {
             try eventStore.save(reminder, commit: true)
-            await reload()
+            let completionGeneration: Int?
             if completed {
+                dismissCompletionUndo()
+                completionGeneration = completionUndoGeneration
+            } else {
+                completionGeneration = nil
+            }
+            await reload()
+            if let completionGeneration,
+               completionUndoGeneration == completionGeneration,
+               selectedCalendarIdentifier == calendarIdentifier {
                 presentCompletionUndo(for: reminder)
             }
             return true
@@ -173,6 +183,7 @@ final class RemindersStore: NSObject {
     }
 
     func dismissCompletionUndo() {
+        completionUndoGeneration &+= 1
         completionUndoExpiryTask?.cancel()
         completionUndoExpiryTask = nil
         recentlyCompletedReminder = nil
@@ -335,7 +346,7 @@ final class RemindersStore: NSObject {
         if let rememberedIdentifier = userDefaults?.string(
             forKey: Self.selectedCalendarIdentifierDefaultsKey
         ), calendars.contains(where: { $0.calendarIdentifier == rememberedIdentifier }) {
-            selectedCalendarIdentifier = rememberedIdentifier
+            setSelectedCalendarIdentifier(rememberedIdentifier)
             return
         }
 
@@ -344,13 +355,17 @@ final class RemindersStore: NSObject {
         if let fallbackIdentifier {
             setSelectedCalendarIdentifier(fallbackIdentifier)
         } else {
-            selectedCalendarIdentifier = nil
+            setSelectedCalendarIdentifier(nil)
         }
     }
 
-    private func setSelectedCalendarIdentifier(_ identifier: String) {
+    private func setSelectedCalendarIdentifier(_ identifier: String?) {
+        guard selectedCalendarIdentifier != identifier else { return }
+        dismissCompletionUndo()
         selectedCalendarIdentifier = identifier
-        userDefaults?.set(identifier, forKey: Self.selectedCalendarIdentifierDefaultsKey)
+        if let identifier {
+            userDefaults?.set(identifier, forKey: Self.selectedCalendarIdentifierDefaultsKey)
+        }
     }
 
     private func presentCompletionUndo(for reminder: EKReminder) {
