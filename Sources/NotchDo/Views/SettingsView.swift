@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @MainActor
@@ -20,19 +21,17 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.black)
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color.notchAccent)
-                }
-                .frame(width: 42, height: 42)
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("NotchDo")
                         .font(.headline)
-                    Text("A calm home for Reminders in your notch.")
+                    Text("Your reminders, right on the notch.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -80,6 +79,7 @@ struct SettingsView: View {
         }
         .padding(24)
         .frame(width: 420)
+        .navigationTitle("Settings")
         .onAppear {
             launchAtLogin.refresh()
         }
