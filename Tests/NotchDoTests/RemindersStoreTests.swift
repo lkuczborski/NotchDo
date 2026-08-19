@@ -219,8 +219,8 @@ struct RemindersStoreTests {
         }
     }
 
-    @Test("Authorization refresh recovers after Settings grants access")
-    func authorizationRecovery() async {
+    @Test("Panel interaction recovers after Settings grants access")
+    func panelInteractionAuthorizationRecovery() async {
         let events = FakeReminderEventStore()
         events.authorizationStatusStub = .denied
         let store = RemindersStore(eventStore: events)
@@ -241,8 +241,8 @@ struct RemindersStoreTests {
         #expect(events.accessRequestCount == 0)
     }
 
-    @Test("Authorization revocation clears content and invalidates an in-flight reload")
-    func authorizationRevocationDuringReload() async {
+    @Test("Panel interaction clears revoked content and invalidates an in-flight reload")
+    func panelInteractionAuthorizationRevocationDuringReload() async {
         let events = FakeReminderEventStore()
         let inbox = events.makeCalendar(title: "Inbox")
         let visible = events.makeReminder(title: "Visible", calendar: inbox)
@@ -270,6 +270,8 @@ struct RemindersStoreTests {
         #expect(store.calendars.isEmpty)
         #expect(store.reminders.isEmpty)
         #expect(store.selectedCalendar == nil)
+        #expect(store.lastSyncedAt == nil)
+        #expect(store.syncState == .idle)
     }
 
     @Test("Reload treats a nil EventKit fetch result as an empty successful snapshot")
