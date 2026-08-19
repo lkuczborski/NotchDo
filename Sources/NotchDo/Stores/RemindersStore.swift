@@ -73,12 +73,26 @@ final class RemindersStore: NSObject {
         selectedCalendar?.title ?? "Reminders"
     }
 
+    var selectedCalendarIsWritable: Bool {
+        guard authorization == .fullAccess, let selectedCalendar else { return false }
+        return eventStore.allowsContentModifications(in: selectedCalendar)
+    }
+
+    func canModify(_ reminder: EKReminder) -> Bool {
+        guard authorization == .fullAccess, let calendar = reminder.calendar else { return false }
+        return eventStore.allowsContentModifications(in: calendar)
+    }
+
     func start() async {
         await resolveAuthorization(requestIfNeeded: false)
     }
 
     func requestAccess() async {
         await resolveAuthorization(requestIfNeeded: true)
+    }
+
+    func refreshAuthorization() async {
+        await resolveAuthorization(requestIfNeeded: false)
     }
 
     func reload() async {
@@ -123,7 +137,9 @@ final class RemindersStore: NSObject {
     @discardableResult
     func addReminder(title: String) async -> Bool {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanTitle.isEmpty, let calendar = selectedCalendar else { return false }
+        guard !cleanTitle.isEmpty,
+              let calendar = selectedCalendar,
+              selectedCalendarIsWritable else { return false }
 
         let reminder = eventStore.makeReminder()
         reminder.calendar = calendar
@@ -143,6 +159,7 @@ final class RemindersStore: NSObject {
 
     @discardableResult
     func setCompleted(_ reminder: EKReminder, completed: Bool = true) async -> Bool {
+        guard canModify(reminder) else { return false }
         let previousValue = reminder.isCompleted
         let previousReminders = reminders
         let calendarIdentifier = reminder.calendar.calendarIdentifier
@@ -208,7 +225,7 @@ final class RemindersStore: NSObject {
 
     func rename(_ reminder: EKReminder, to title: String) async {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanTitle.isEmpty else { return }
+        guard !cleanTitle.isEmpty, canModify(reminder) else { return }
 
         let previousTitle = reminder.title
         reminder.title = cleanTitle
@@ -228,6 +245,7 @@ final class RemindersStore: NSObject {
         with draft: ReminderDraft,
         fields requestedFields: Set<ReminderEditField>
     ) async -> ReminderUpdateResult {
+        guard canModify(reminder) else { return .failed }
         var fields = requestedFields
         var rejectedFields: Set<ReminderEditField> = []
         let cleanTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -293,6 +311,7 @@ final class RemindersStore: NSObject {
     }
 
     func delete(_ reminder: EKReminder) async {
+        guard canModify(reminder) else { return }
         do {
             try eventStore.remove(reminder, commit: true)
             await reload()
@@ -324,13 +343,29 @@ final class RemindersStore: NSObject {
             }
         case .notDetermined:
             authorization = .notDetermined
+            clearEventKitContent()
         case .restricted:
             authorization = .restricted
+            clearEventKitContent()
         case .denied, .writeOnly:
             authorization = .denied
+            clearEventKitContent()
         @unknown default:
             authorization = .denied
+            clearEventKitContent()
         }
+    }
+
+    private func clearEventKitContent() {
+        reloadGeneration &+= 1
+        calendars = []
+        reminders = []
+        if !setSelectedCalendarIdentifier(nil) {
+            dismissCompletionUndo()
+        }
+        lastSyncedAt = nil
+        lastAddedReminderIdentifier = nil
+        syncState = .idle
     }
 
     private func loadCalendars() {
@@ -359,13 +394,15 @@ final class RemindersStore: NSObject {
         }
     }
 
-    private func setSelectedCalendarIdentifier(_ identifier: String?) {
-        guard selectedCalendarIdentifier != identifier else { return }
+    @discardableResult
+    private func setSelectedCalendarIdentifier(_ identifier: String?) -> Bool {
+        guard selectedCalendarIdentifier != identifier else { return false }
         dismissCompletionUndo()
         selectedCalendarIdentifier = identifier
         if let identifier {
             userDefaults?.set(identifier, forKey: Self.selectedCalendarIdentifierDefaultsKey)
         }
+        return true
     }
 
     private func presentCompletionUndo(for reminder: EKReminder) {

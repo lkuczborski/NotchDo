@@ -21,6 +21,9 @@ final class NotchPanelController: NSObject {
         interaction.onExpansionChange = { [weak self] expanded in
             self?.setExpanded(expanded)
         }
+        interaction.onInteraction = { [weak self] in
+            self?.refreshAuthorizationForPanelInteraction()
+        }
         configurePanel()
         installPointerMonitoring()
 
@@ -100,6 +103,9 @@ final class NotchPanelController: NSObject {
 
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             self?.updatePointerLocation()
+            if event.type == .leftMouseDown {
+                self?.interaction.registerInteraction()
+            }
             return event
         }
 
@@ -140,6 +146,12 @@ final class NotchPanelController: NSObject {
         } else {
             panel.ignoresMouseEvents = true
             panel.resignKey()
+        }
+    }
+
+    private func refreshAuthorizationForPanelInteraction() {
+        Task {
+            await store.refreshAuthorization()
         }
     }
 

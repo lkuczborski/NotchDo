@@ -9,6 +9,7 @@ final class FakeReminderEventStore: ReminderEventStore {
     var accessGranted = true
     var accessError: Error?
     var calendarsStub: [EKCalendar] = []
+    var readOnlyCalendarIdentifiers: Set<String> = []
     var defaultCalendarStub: EKCalendar?
     var fetchedReminders: [EKReminder]? = []
     var saveError: Error?
@@ -37,6 +38,10 @@ final class FakeReminderEventStore: ReminderEventStore {
 
     func calendars(for entityType: EKEntityType) -> [EKCalendar] {
         calendarsStub
+    }
+
+    func allowsContentModifications(in calendar: EKCalendar) -> Bool {
+        !readOnlyCalendarIdentifiers.contains(calendar.calendarIdentifier)
     }
 
     func defaultCalendarForNewReminders() -> EKCalendar? {

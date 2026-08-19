@@ -98,11 +98,15 @@ struct NotchRootView: View {
                     )
                 }
 
-                ComposerView(
-                    store: store,
-                    isActive: isExpanded,
-                    onInteraction: collapseReminderRows
-                )
+                if store.selectedCalendarIsWritable {
+                    ComposerView(
+                        store: store,
+                        isActive: isExpanded,
+                        onInteraction: collapseReminderRows
+                    )
+                } else if store.selectedCalendar != nil {
+                    ReadOnlyListNotice()
+                }
             }
         }
         .padding(.horizontal, 26)
