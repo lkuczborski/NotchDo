@@ -22,7 +22,7 @@ struct CompletionUndoView: View {
                 .accessibilityLabel("Undo completion of \(reminderTitle)")
         }
         .font(.system(size: 11, weight: .semibold, design: .rounded))
-        .padding(.horizontal, 11)
+        .padding(.horizontal, 12)
         .frame(height: 30)
         .background(.white.opacity(0.045), in: Capsule())
         .overlay {
