@@ -10,8 +10,49 @@ struct ReminderListView: View {
     @State private var expandedReminderIdentifier: String?
     @State private var scrollIndicatorTrigger = 0
     @State private var revealTask: Task<Void, Never>?
+    @State private var deletionConfirmation = ReminderDeletionConfirmation()
 
     var body: some View {
+        listContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: isPanelExpanded) { _, panelIsExpanded in
+                if !panelIsExpanded {
+                    collapseExpandedReminder()
+                }
+            }
+            .onChange(of: store.reminders.map(\.calendarItemIdentifier)) {
+                _, identifiers in
+                deletionConfirmation.cancelIfReminderIsMissing(from: identifiers)
+                guard let expandedReminderIdentifier,
+                      !identifiers.contains(expandedReminderIdentifier) else { return }
+                self.expandedReminderIdentifier = nil
+            }
+            .onChange(of: collapseRequest) { _, _ in
+                collapseExpandedReminder()
+            }
+            .onChange(of: deletionConfirmation.pendingReminder != nil) {
+                _, isPresented in
+                onTransientInteraction(isPresented)
+            }
+            .onExitCommand {
+                collapseExpandedReminder()
+            }
+            .deleteConfirmationAlert(
+                isPresented: isDeleteConfirmationPresented,
+                reminder: deletionConfirmation.pendingReminder,
+                onDelete: confirmReminderDeletion,
+                onCancel: deletionConfirmation.cancelDeletion
+            )
+            .onDisappear {
+                revealTask?.cancel()
+                revealTask = nil
+                deletionConfirmation.cancelDeletion()
+                onTransientInteraction(false)
+            }
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
         Group {
             if store.reminders.isEmpty {
                 emptyState
@@ -64,27 +105,6 @@ struct ReminderListView: View {
                     }
                 }
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: isPanelExpanded) { _, panelIsExpanded in
-            if !panelIsExpanded {
-                collapseExpandedReminder()
-            }
-        }
-        .onChange(of: store.reminders.map(\.calendarItemIdentifier)) { _, identifiers in
-            guard let expandedReminderIdentifier,
-                  !identifiers.contains(expandedReminderIdentifier) else { return }
-            self.expandedReminderIdentifier = nil
-        }
-        .onChange(of: collapseRequest) { _, _ in
-            collapseExpandedReminder()
-        }
-        .onExitCommand {
-            collapseExpandedReminder()
-        }
-        .onDisappear {
-            revealTask?.cancel()
-            revealTask = nil
         }
     }
 
@@ -169,7 +189,28 @@ struct ReminderListView: View {
     }
 
     private func deleteReminder(_ reminder: EKReminder) {
+        guard deletionConfirmation.requestDeletion(of: reminder) else { return }
+        performDeletion(of: reminder)
+    }
+
+    private func confirmReminderDeletion(_ reminder: EKReminder) {
+        _ = deletionConfirmation.confirmDeletion()
+        performDeletion(of: reminder)
+    }
+
+    private func performDeletion(of reminder: EKReminder) {
         Task { await store.delete(reminder) }
+    }
+
+    private var isDeleteConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { deletionConfirmation.pendingReminder != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deletionConfirmation.cancelDeletion()
+                }
+            }
+        )
     }
 
     private var emptyState: some View {
