@@ -5,6 +5,7 @@ import SwiftUI
 struct NotchHeaderView: View {
     let store: RemindersStore
     let onInteraction: () -> Void
+    let onSearch: () -> Void
     let onTransientInteractionChange: (Bool) -> Void
 
     @State private var isCalendarPickerPresented = false
@@ -18,6 +19,19 @@ struct NotchHeaderView: View {
             listSelector
 
             Spacer(minLength: 10)
+
+            Button(action: onSearch) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .frame(width: 30, height: 30)
+                    .background(Color.white.opacity(0.07), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("f", modifiers: .command)
+            .accessibilityLabel("Search reminders")
+            .help("Search Reminders (Command-F)")
 
             Button {
                 isOptionsPresented.toggle()
