@@ -11,6 +11,7 @@ struct NotchHeaderView: View {
     @State private var isOptionsPresented = false
     @State private var isCreateListPresented = false
     @State private var newListTitle = ""
+    @FocusState private var focusedPickerSelection: ReminderPickerSelection?
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -96,6 +97,50 @@ struct NotchHeaderView: View {
 
     private var calendarList: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Text("Smart Lists")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .padding(.top, 3)
+
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                spacing: 2
+            ) {
+                ForEach(ReminderSmartScope.allCases) { scope in
+                    Button {
+                        store.selectSmartScope(scope)
+                        isCalendarPickerPresented = false
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: scope.systemImage)
+                                .frame(width: 12)
+                                .foregroundStyle(Color.notchAccent)
+                            Text(scope.title)
+                                .lineLimit(1)
+                            Spacer(minLength: 2)
+                            if store.selectedSmartScope == scope {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(Color.notchAccent)
+                            }
+                        }
+                        .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 7)
+                        .frame(height: 28)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .focusable()
+                    .focused($focusedPickerSelection, equals: .smart(scope))
+                    .accessibilityLabel("Show \(scope.title) reminders")
+                }
+            }
+
+            Divider()
+                .padding(.vertical, 2)
+
             Text("Lists")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
@@ -125,7 +170,8 @@ struct NotchHeaderView: View {
 
                                     Spacer(minLength: 12)
 
-                                    if calendar.calendarIdentifier
+                                    if store.selectedSmartScope == nil,
+                                       calendar.calendarIdentifier
                                         == store.selectedCalendarIdentifier {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 10, weight: .bold))
@@ -139,6 +185,12 @@ struct NotchHeaderView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .focusable()
+                            .focused(
+                                $focusedPickerSelection,
+                                equals: .calendar(calendar.calendarIdentifier)
+                            )
+                            .accessibilityLabel("Show \(calendar.title) reminder list")
                         }
                     }
                 }
@@ -163,6 +215,8 @@ struct NotchHeaderView: View {
         .padding(7)
         .frame(width: 224)
         .preferredColorScheme(.dark)
+        .onAppear(perform: focusCurrentPickerSelection)
+        .onMoveCommand(perform: movePickerFocus)
     }
 
     private var options: some View {
@@ -216,6 +270,30 @@ struct NotchHeaderView: View {
         onTransientInteractionChange(
             isCalendarPickerPresented || isOptionsPresented || isCreateListPresented
         )
+    }
+
+    private var pickerSelections: [ReminderPickerSelection] {
+        ReminderSmartScope.allCases.map(ReminderPickerSelection.smart)
+            + store.calendars.map { .calendar($0.calendarIdentifier) }
+    }
+
+    private func focusCurrentPickerSelection() {
+        let selection = store.selectedSmartScope.map(ReminderPickerSelection.smart)
+            ?? store.selectedCalendarIdentifier.map(ReminderPickerSelection.calendar)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard isCalendarPickerPresented else { return }
+            focusedPickerSelection = selection
+        }
+    }
+
+    private func movePickerFocus(_ direction: MoveCommandDirection) {
+        guard direction == .up || direction == .down,
+              !pickerSelections.isEmpty else { return }
+        let currentIndex = focusedPickerSelection.flatMap(pickerSelections.firstIndex) ?? 0
+        let offset = direction == .down ? 1 : -1
+        let nextIndex = min(max(currentIndex + offset, 0), pickerSelections.count - 1)
+        focusedPickerSelection = pickerSelections[nextIndex]
     }
 
 }
