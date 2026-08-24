@@ -129,7 +129,7 @@ struct ReminderListView: View {
         let isEditable = store.canModify(reminder)
         return ReminderRow(
             reminder: reminder,
-            calendarColor: store.selectedCalendarColor,
+            calendarColor: store.color(for: reminder),
             dueMode: store.dueMode(for: reminder),
             isEditable: isEditable,
             isExpanded: expansionBinding(for: reminder.calendarItemIdentifier),
