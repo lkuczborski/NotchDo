@@ -16,6 +16,7 @@ let package = Package(
             path: "Sources/NotchDo",
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("Carbon"),
                 .linkedFramework("EventKit"),
                 .linkedFramework("ServiceManagement")
             ]

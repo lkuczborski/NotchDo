@@ -6,7 +6,15 @@ struct NotchDoApp: App {
 
     var body: some Scene {
         Settings {
-            SettingsView(store: appDelegate.remindersStore)
+            SettingsView(
+                store: appDelegate.remindersStore,
+                globalShortcut: appDelegate.globalShortcutStore
+            )
+        }
+        .commands {
+            CommandMenu("Capture") {
+                Button("Quick Reminder…", action: AppActions.requestQuickCapture)
+            }
         }
     }
 }

@@ -89,6 +89,61 @@ struct RemindersStoreTests {
         #expect(await !store.addReminder(title: "No destination"))
     }
 
+    @Test("Quick capture saves all details into the chosen writable list")
+    func quickCaptureDetails() async throws {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let work = events.makeCalendar(title: "Work")
+        events.calendarsStub = [inbox, work]
+        events.defaultCalendarStub = inbox
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+        let dueDate = fixedDate(2026, 8, 25, hour: 9, minute: 30)
+        let draft = ReminderDraft(
+            title: "  Ship release  ",
+            notes: "Attach release notes",
+            dueDate: dueDate,
+            priority: .high
+        )
+
+        let didSave = await store.addReminder(
+            draft: draft,
+            calendarIdentifier: work.calendarIdentifier
+        )
+
+        #expect(didSave)
+        let reminder = try #require(events.savedReminders.last)
+        #expect(reminder.title == "Ship release")
+        #expect(reminder.notes == "Attach release notes")
+        #expect(reminder.calendar === work)
+        #expect(reminder.priority == ReminderPriorityOption.high.rawValue)
+        let components = try #require(reminder.dueDateComponents)
+        let savedDate = try #require(components.calendar?.date(from: components))
+        #expect(abs(savedDate.timeIntervalSince(dueDate)) < 1)
+    }
+
+    @Test("Quick capture refuses read-only lists and preserves input data")
+    func quickCaptureReadOnlyList() async {
+        let events = FakeReminderEventStore()
+        let inbox = events.makeCalendar(title: "Inbox")
+        let shared = events.makeCalendar(title: "Shared")
+        events.calendarsStub = [inbox, shared]
+        events.defaultCalendarStub = inbox
+        events.readOnlyCalendarIdentifiers = [shared.calendarIdentifier]
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+        let session = QuickCaptureSession(store: store)
+        session.prepare()
+        session.title = "Keep this"
+        session.calendarIdentifier = shared.calendarIdentifier
+
+        #expect(!(await session.submit()))
+        #expect(events.savedReminders.isEmpty)
+        #expect(session.title == "Keep this")
+        #expect(session.errorMessage != nil)
+        #expect(store.writableCalendars.map(\.calendarIdentifier) == [inbox.calendarIdentifier])
+    }
+
     @Test("Calendar selection validates identifiers and survives EventKit refresh")
     func calendarSelectionAndRefresh() async {
         let events = FakeReminderEventStore()

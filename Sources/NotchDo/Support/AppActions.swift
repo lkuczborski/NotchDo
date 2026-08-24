@@ -1,6 +1,14 @@
 import AppKit
 
 enum AppActions {
+    static let quickCaptureRequested = Notification.Name(
+        "com.luku.NotchDo.quickCaptureRequested"
+    )
+
+    static func requestQuickCapture() {
+        NotificationCenter.default.post(name: quickCaptureRequested, object: nil)
+    }
+
     static func openReminders() {
         guard let url = NSWorkspace.shared.urlForApplication(
             withBundleIdentifier: "com.apple.reminders"
