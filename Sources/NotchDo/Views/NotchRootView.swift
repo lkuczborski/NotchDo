@@ -88,7 +88,7 @@ struct NotchRootView: View {
                 if let reminder = store.recentlyCompletedReminder {
                     CompletionUndoView(
                         reminderTitle: reminder.title,
-                        color: store.selectedCalendarColor,
+                        color: store.color(for: reminder),
                         onUndo: undoRecentCompletion
                     )
                     .transition(
@@ -98,7 +98,9 @@ struct NotchRootView: View {
                     )
                 }
 
-                if store.selectedCalendarIsWritable {
+                if store.selectedSmartScope != nil {
+                    EmptyView()
+                } else if store.selectedCalendarIsWritable {
                     ComposerView(
                         store: store,
                         isActive: isExpanded,
