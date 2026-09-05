@@ -250,22 +250,26 @@ struct ReminderListView: View {
                 Circle()
                     .fill(store.selectedCalendarColor.opacity(0.1))
                     .frame(width: 44, height: 44)
-                Image(systemName: store.selectedCalendarIsWritable ? "checkmark" : "lock.fill")
+                Image(systemName: isReadOnlyEmptyList ? "lock.fill" : "checkmark")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(store.selectedCalendarColor)
             }
-            Text(store.selectedCalendarIsWritable ? "Nothing left here" : "No open reminders")
+            Text(isReadOnlyEmptyList ? "No open reminders" : "Nothing left here")
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.84))
             Text(
-                store.selectedCalendarIsWritable
-                    ? "A very good kind of empty."
-                    : "This read-only list is currently empty."
+                isReadOnlyEmptyList
+                    ? "This read-only list is currently empty."
+                    : "A very good kind of empty."
             )
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.5))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var isReadOnlyEmptyList: Bool {
+        store.selectedSmartScope == nil && !store.selectedCalendarIsWritable
     }
 
     private var visibleReminders: [EKReminder] {
