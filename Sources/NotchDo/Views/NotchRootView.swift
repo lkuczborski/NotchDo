@@ -9,6 +9,8 @@ struct NotchRootView: View {
     @State private var rowCollapseRequest = 0
     @State private var expandedCountFrame: CGRect = .zero
     @State private var search = ReminderSearchState()
+    @State private var isCreateListPresented = false
+    @State private var newListTitle = ""
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -34,6 +36,23 @@ struct NotchRootView: View {
                 store: store,
                 onPresentationChange: interaction.updateTransientInteraction
             )
+        }
+        .alert("Create Your First List", isPresented: $isCreateListPresented) {
+            TextField("List name", text: $newListTitle)
+            Button("Cancel", role: .cancel) {
+                newListTitle = ""
+            }
+            Button("Create") {
+                let title = newListTitle
+                newListTitle = ""
+                Task { await store.createCalendar(title: title) }
+            }
+            .disabled(newListTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("The list is created directly in Apple Reminders.")
+        }
+        .onChange(of: isCreateListPresented) { _, isPresented in
+            interaction.updateTransientInteraction(isPresented)
         }
         .animation(surfaceAnimation, value: isExpanded)
         .onChange(of: isExpanded) { _, expanded in
@@ -168,8 +187,8 @@ struct NotchRootView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch store.authorization {
-        case .fullAccess:
+        switch displayState {
+        case .reminders, .emptyList:
             ReminderListView(
                 store: store,
                 isPanelExpanded: isExpanded,
@@ -177,7 +196,43 @@ struct NotchRootView: View {
                 searchQuery: search.query,
                 onTransientInteraction: interaction.updateTransientInteraction
             )
-        case .requesting:
+        case .initialLoading:
+            AccessStateView(
+                symbol: "arrow.triangle.2.circlepath",
+                title: "Loading reminders",
+                message: "Checking your selected list in Apple Reminders.",
+                showsProgress: true,
+                actionTitle: nil,
+                action: nil
+            )
+        case .noCalendars:
+            AccessStateView(
+                symbol: "list.bullet.rectangle",
+                title: "No reminder lists yet",
+                message: "Create your first list here or in Apple Reminders.",
+                showsProgress: false,
+                actionTitle: "Create Your First List",
+                action: { isCreateListPresented = true }
+            )
+        case .noSelectedCalendar:
+            AccessStateView(
+                symbol: "list.bullet",
+                title: "Choose a reminder list",
+                message: "Select a list above to show its open reminders.",
+                showsProgress: false,
+                actionTitle: nil,
+                action: nil
+            )
+        case .failed:
+            AccessStateView(
+                symbol: "exclamationmark.triangle.fill",
+                title: "Couldn’t update this list",
+                message: "Your reminders are unchanged. Try refreshing the list.",
+                showsProgress: false,
+                actionTitle: "Try Again",
+                action: { Task { await store.reload() } }
+            )
+        case .requestingPermission:
             AccessStateView(
                 symbol: "checklist",
                 title: "Connecting to Reminders",
@@ -186,7 +241,7 @@ struct NotchRootView: View {
                 actionTitle: nil,
                 action: nil
             )
-        case .denied, .restricted:
+        case .permissionDenied:
             AccessStateView(
                 symbol: "lock.fill",
                 title: "Reminders access is off",
@@ -195,7 +250,16 @@ struct NotchRootView: View {
                 actionTitle: "Open Settings",
                 action: AppActions.openRemindersPrivacySettings
             )
-        case .notDetermined:
+        case .permissionRestricted:
+            AccessStateView(
+                symbol: "lock.shield.fill",
+                title: "Reminders access is restricted",
+                message: "This Mac’s privacy settings don’t currently allow NotchDo to use Reminders.",
+                showsProgress: false,
+                actionTitle: "Open Settings",
+                action: AppActions.openRemindersPrivacySettings
+            )
+        case .needsPermission:
             AccessStateView(
                 symbol: "checklist",
                 title: "Use Apple Reminders",
@@ -205,6 +269,18 @@ struct NotchRootView: View {
                 action: { Task { await store.requestAccess() } }
             )
         }
+    }
+
+    private var displayState: ReminderDisplayState {
+        ReminderDisplayState(
+            authorization: store.authorization,
+            calendarCount: store.calendars.count,
+            hasSelectedCalendar: store.selectedSmartScope != nil || store.selectedCalendar != nil,
+            reminderCount: store.reminders.count,
+            selectedCalendarIsWritable: store.selectedSmartScope != nil || store.selectedCalendarIsWritable,
+            syncState: store.syncState,
+            lastSyncedAt: store.lastSyncedAt
+        )
     }
 
     private var surfaceShape: NotchSurfaceShape {
