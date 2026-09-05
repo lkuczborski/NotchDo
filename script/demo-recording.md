@@ -6,6 +6,10 @@ personal Apple Reminders data.
 
 ## Launch
 
+Quit the production NotchDo app first. The launcher refuses to start while it
+is running so Quick Capture cannot open the production app and expose real
+reminders. Keep production NotchDo closed throughout testing or recording.
+
 ```sh
 ./script/demo.sh features
 ```
