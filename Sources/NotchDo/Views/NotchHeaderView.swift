@@ -19,11 +19,13 @@ struct NotchHeaderView: View {
     init(
         store: RemindersStore,
         onInteraction: @escaping () -> Void,
+        onSearch: @escaping () -> Void,
         onTransientInteractionChange: @escaping (Bool) -> Void,
         syncStatusFormatter: ReminderSyncStatusFormatter = .live
     ) {
         self.store = store
         self.onInteraction = onInteraction
+        self.onSearch = onSearch
         self.onTransientInteractionChange = onTransientInteractionChange
         self.syncStatusFormatter = syncStatusFormatter
     }
