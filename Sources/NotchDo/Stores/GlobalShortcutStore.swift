@@ -33,7 +33,7 @@ final class GlobalShortcutStore {
     @discardableResult
     func setShortcut(_ candidate: GlobalShortcut) -> Bool {
         guard candidate.isValid else {
-            registrationError = "Include at least one modifier and a letter, number, Space, or function key."
+            registrationError = "Include Command, Control, or Option with a letter, number, Space, or function key."
             return false
         }
 

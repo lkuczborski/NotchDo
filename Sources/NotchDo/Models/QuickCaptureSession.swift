@@ -10,10 +10,16 @@ final class QuickCaptureSession {
     private(set) var presentationID = 0
     private let store: RemindersStore
     private let now: () -> Date
+    private let calendar: Calendar
 
-    init(store: RemindersStore, now: @escaping () -> Date = Date.init) {
+    init(
+        store: RemindersStore,
+        now: @escaping () -> Date = Date.init,
+        calendar: Calendar = .autoupdatingCurrent
+    ) {
         self.store = store
         self.now = now
+        self.calendar = calendar
     }
 
     var title: String {
@@ -41,26 +47,60 @@ final class QuickCaptureSession {
         set { state.calendarIdentifier = newValue }
     }
 
-    var canSubmit: Bool { state.canSubmit && !isSaving }
+    var canSubmit: Bool {
+        state.canSubmit && !isSaving && store.writableCalendars.contains {
+            $0.calendarIdentifier == state.calendarIdentifier
+        }
+    }
+
+    func reconcileDestination() {
+        let writable = store.writableCalendars
+        guard !writable.contains(where: { $0.calendarIdentifier == state.calendarIdentifier }) else { return }
+        state.calendarIdentifier = writable.first(where: {
+            $0.calendarIdentifier == store.selectedCalendarIdentifier
+        })?.calendarIdentifier ?? writable.first?.calendarIdentifier
+    }
+
+    func schedule(_ schedule: ReminderQuickSchedule) {
+        var draft = state.reminderDraft
+        schedule.apply(to: &draft, now: now(), calendar: calendar)
+        state.includesDueDate = draft.hasDueDate
+        state.dueDate = draft.dueDate
+    }
+
+    func isScheduled(_ schedule: ReminderQuickSchedule) -> Bool {
+        guard state.includesDueDate, schedule != .clearDate else { return false }
+        var draft = state.reminderDraft
+        schedule.apply(to: &draft, now: now(), calendar: calendar)
+        return calendar.isDate(draft.dueDate, inSameDayAs: state.dueDate)
+    }
 
     func prepare() {
         presentationID &+= 1
         state.reset(
             now: now(),
-            selectedCalendarIdentifier: store.selectedCalendarIdentifier
+            selectedCalendarIdentifier: store.selectedCalendarIdentifier,
+            calendar: calendar
         )
         isSaving = false
         errorMessage = nil
+        reconcileDestination()
     }
 
     func submit() async -> Bool {
-        guard canSubmit else { return false }
+        guard state.canSubmit, !isSaving else { return false }
+        guard canSubmit else {
+            errorMessage = "Choose a writable Reminders list and try again."
+            return false
+        }
+        let submittedPresentation = presentationID
         isSaving = true
         errorMessage = nil
         let didSave = await store.addReminder(
             draft: state.reminderDraft,
             calendarIdentifier: state.calendarIdentifier
         )
+        guard presentationID == submittedPresentation else { return false }
         isSaving = false
         if !didSave {
             errorMessage = store.syncErrorMessage

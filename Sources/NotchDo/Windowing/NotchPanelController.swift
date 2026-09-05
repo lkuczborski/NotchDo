@@ -103,7 +103,7 @@ final class NotchPanelController: NSObject {
 
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             self?.updatePointerLocation()
-            if event.type == .leftMouseDown {
+            if event.type == .leftMouseDown, event.window === self?.panel {
                 self?.interaction.registerInteraction()
             }
             return event

@@ -7,13 +7,18 @@ final class QuickCapturePanelController: NSObject {
     private let session: QuickCaptureSession
     private var panel: QuickCapturePanel?
     private var outsideClickMonitor: Any?
-    private weak var previouslyActiveApplication: NSRunningApplication?
+    private var localClickMonitor: Any?
+    private var previouslyActiveApplication: NSRunningApplication?
 
     init(store: RemindersStore) {
         self.store = store
         session = QuickCaptureSession(store: store)
         super.init()
         configurePanel()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(applicationDidResignActive),
+            name: NSApplication.didResignActiveNotification, object: nil
+        )
     }
 
     func toggle() {
@@ -26,6 +31,10 @@ final class QuickCapturePanelController: NSObject {
 
     func show() {
         guard let panel else { return }
+        guard !panel.isVisible else {
+            panel.makeKeyAndOrderFront(nil)
+            return
+        }
         previouslyActiveApplication = NSWorkspace.shared.frontmostApplication
         session.prepare()
         position(panel, on: Self.activeScreen())
@@ -34,6 +43,7 @@ final class QuickCapturePanelController: NSObject {
         panel.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKey()
+        Task { await store.refreshAuthorization() }
 
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.alphaValue = 1
@@ -45,17 +55,20 @@ final class QuickCapturePanelController: NSObject {
         }
     }
 
-    func dismiss() {
+    func dismiss(restorePreviousApplication: Bool = true) {
         guard let panel, panel.isVisible else { return }
         removeOutsideClickMonitor()
         panel.orderOut(nil)
-        previouslyActiveApplication?.activate()
+        if restorePreviousApplication, NSApp.isActive,
+           previouslyActiveApplication?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            previouslyActiveApplication?.activate()
+        }
         previouslyActiveApplication = nil
     }
 
     private func configurePanel() {
         let panel = QuickCapturePanel(
-            contentRect: CGRect(origin: .zero, size: CGSize(width: 660, height: 220)),
+            contentRect: CGRect(origin: .zero, size: CGSize(width: 660, height: 150)),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -63,7 +76,8 @@ final class QuickCapturePanelController: NSObject {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        // SwiftUI owns the surface; the window draws no background or shadow.
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.isFloatingPanel = true
         panel.isReleasedWhenClosed = false
@@ -77,30 +91,23 @@ final class QuickCapturePanelController: NSObject {
         panel.title = "Quick Reminder"
         panel.setAccessibilityTitle("Quick Reminder")
 
-        let effectView = NSVisualEffectView()
-        effectView.material = .hudWindow
-        effectView.blendingMode = .behindWindow
-        effectView.state = .active
-        effectView.wantsLayer = true
-        effectView.layer?.cornerRadius = 20
-        effectView.layer?.cornerCurve = .continuous
-        effectView.layer?.masksToBounds = true
-
+        // A borderless floating panel is required on macOS 14. SwiftUI owns
+        // the material, shape, layout, controls, and popovers inside it.
         let rootView = QuickCaptureView(
             store: store,
             session: session,
-            onDismiss: { [weak self] in self?.dismiss() }
+            onDismiss: { [weak self] in self?.dismiss() },
+            onHeightChange: { [weak self] height in
+                guard let panel = self?.panel, abs(panel.frame.height - height) > 0.5 else { return }
+                var frame = panel.frame
+                frame.origin.y += frame.height - height
+                frame.size.height = height
+                panel.setFrame(frame, display: true)
+            }
         )
         let hostingView = NSHostingView(rootView: rootView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        effectView.addSubview(hostingView)
-        NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
-            hostingView.topAnchor.constraint(equalTo: effectView.topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor)
-        ])
-        panel.contentView = effectView
+        hostingView.sizingOptions = []
+        panel.contentView = hostingView
         self.panel = panel
     }
 
@@ -117,7 +124,17 @@ final class QuickCapturePanelController: NSObject {
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
-            Task { @MainActor in self?.dismiss() }
+            Task { @MainActor in self?.dismiss(restorePreviousApplication: false) }
+        }
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            // Clicks in our popovers belong to capture. Other app windows do not.
+            if let window = event.window,
+               window is NotchPanel || !(window is NSPanel) {
+                self?.dismiss(restorePreviousApplication: false)
+            }
+            return event
         }
     }
 
@@ -126,6 +143,10 @@ final class QuickCapturePanelController: NSObject {
             NSEvent.removeMonitor(outsideClickMonitor)
             self.outsideClickMonitor = nil
         }
+        if let localClickMonitor {
+            NSEvent.removeMonitor(localClickMonitor)
+            self.localClickMonitor = nil
+        }
     }
 
     private static func activeScreen() -> NSScreen {
@@ -133,5 +154,9 @@ final class QuickCapturePanelController: NSObject {
         return NSScreen.screens.first(where: { $0.frame.contains(pointer) })
             ?? NSScreen.main
             ?? NSScreen.screens[0]
+    }
+
+    @objc private func applicationDidResignActive() {
+        dismiss(restorePreviousApplication: false)
     }
 }

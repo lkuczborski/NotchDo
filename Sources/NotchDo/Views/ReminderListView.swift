@@ -39,7 +39,10 @@ struct ReminderListView: View {
             .onReceive(
                 NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
             ) { _ in
-                if menuTracking.beginTracking() {
+                // App-wide menu notifications also arrive from Settings and capture.
+                if menuTracking.beginTracking(
+                    isOwnerActive: isPanelExpanded && NSApp.keyWindow is NotchPanel
+                ) {
                     reportTransientInteraction()
                 }
             }

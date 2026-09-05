@@ -5,7 +5,8 @@ struct NotchMenuTrackingState {
         depth > 0
     }
 
-    mutating func beginTracking() -> Bool {
+    mutating func beginTracking(isOwnerActive: Bool = true) -> Bool {
+        guard isOwnerActive else { return false }
         let becameActive = depth == 0
         depth += 1
         return becameActive

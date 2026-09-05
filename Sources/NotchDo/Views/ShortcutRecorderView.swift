@@ -35,6 +35,9 @@ struct ShortcutRecorderView: View {
             }
         }
         .onDisappear(perform: stopRecording)
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            stopRecording()
+        }
     }
 
     private func beginRecording() {

@@ -22,6 +22,7 @@ struct GlobalShortcutTests {
     @Test("A shortcut requires a supported key and modifier")
     func validation() {
         #expect(!GlobalShortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: []).isValid)
+        #expect(!GlobalShortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: [.shift]).isValid)
         #expect(!GlobalShortcut(keyCode: 999, modifiers: [.command]).isValid)
         #expect(GlobalShortcut.default.isValid)
     }
@@ -54,16 +55,20 @@ struct GlobalShortcutTests {
     func conflictingShortcutRollback() {
         let registration = FakeGlobalShortcutRegistration()
         let store = GlobalShortcutStore(registration: registration, userDefaults: nil)
-        registration.shouldRegister = false
         let replacement = GlobalShortcut(
             keyCode: UInt32(kVK_ANSI_M),
             modifiers: [.control, .shift]
         )
+        registration.rejectedShortcuts = [replacement]
+        var invocationCount = 0
+        store.onPerformShortcut = { invocationCount += 1 }
 
         #expect(!store.setShortcut(replacement))
         #expect(store.shortcut == .default)
         #expect(store.registrationError != nil)
         #expect(registration.registeredShortcuts == [.default, replacement, .default])
+        registration.invoke()
+        #expect(invocationCount == 1)
     }
 
     @Test("Recording temporarily releases and restores the active shortcut")

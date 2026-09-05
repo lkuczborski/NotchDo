@@ -16,7 +16,8 @@ struct GlobalShortcut: Codable, Equatable, Sendable {
     }
 
     var isValid: Bool {
-        !modifiers.isEmpty && Self.keyName(for: keyCode) != nil
+        !modifiers.intersection([.command, .control, .option]).isEmpty
+            && Self.keyName(for: keyCode) != nil
     }
 
     var displayName: String {
@@ -26,7 +27,7 @@ struct GlobalShortcut: Codable, Equatable, Sendable {
             modifiers.contains(.shift) ? "⇧" : "",
             modifiers.contains(.command) ? "⌘" : ""
         ].joined()
-        return symbols + (Self.keyName(for: keyCode) ?? "Key (keyCode)")
+        return symbols + (Self.keyName(for: keyCode) ?? "Key \(keyCode)")
     }
 
     var carbonModifiers: UInt32 {

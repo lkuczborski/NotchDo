@@ -4,192 +4,223 @@ struct QuickCaptureView: View {
     let store: RemindersStore
     @Bindable var session: QuickCaptureSession
     let onDismiss: () -> Void
+    var onHeightChange: (CGFloat) -> Void = { _ in }
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var focusedField: Field?
-
-    private enum Field: Hashable {
-        case title
-        case notes
-    }
+    @FocusState private var titleFocused: Bool
+    @State private var showsNotes = false
+    @State private var showsCalendar = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 10) {
             if store.authorization == .fullAccess {
-                captureForm
+                titleField
+                shortcuts
+                    .disabled(session.isSaving)
+                if let error = session.errorMessage {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if store.writableCalendars.isEmpty {
+                    Text("Create a writable list in Reminders to add a task.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             } else {
                 accessView
             }
         }
-        .frame(width: 660)
-        .frame(height: 220)
-        .preferredColorScheme(.dark)
-        .onAppear {
-            focusTitle()
-            Task { await store.refreshAuthorization() }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
+        .frame(width: 620)
+        .fixedSize(horizontal: false, vertical: true)
+        .modifier(QuickCaptureSurface())
+        // Keep the rounded surface and its soft shadow clear of window bounds.
+        .padding(20)
+        .background {
+            GeometryReader { geometry in
+                Color.clear.onChange(of: geometry.size.height, initial: true) { _, height in
+                    onHeightChange(height)
+                }
+            }
         }
-        .onChange(of: store.authorization) { _, authorization in
-            if authorization == .fullAccess { focusTitle() }
-        }
+        .onAppear { titleFocused = true }
         .onChange(of: session.presentationID) { _, _ in
-            focusTitle()
+            showsNotes = false
+            showsCalendar = false
+            titleFocused = true
         }
-        .onExitCommand(perform: onDismiss)
+        .onChange(of: store.writableCalendars.map(\.calendarIdentifier)) { _, _ in
+            session.reconcileDestination()
+        }
+        .onChange(of: store.authorization) { _, _ in titleFocused = true }
+        .onChange(of: showsCalendar) { _, visible in if !visible { titleFocused = true } }
+        .onChange(of: showsNotes) { _, visible in if !visible { titleFocused = true } }
+        .onExitCommand {
+            if showsNotes || showsCalendar {
+                showsNotes = false
+                showsCalendar = false
+            } else {
+                onDismiss()
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Quick reminder")
     }
 
-    private var captureForm: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 14) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 28, weight: .light))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .accessibilityHidden(true)
-
-                TextField("What do you want to remember?", text: $session.title)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 24, weight: .regular, design: .rounded))
-                    .focused($focusedField, equals: .title)
-                    .onSubmit(submit)
-                    .accessibilityLabel("Reminder title")
-
-                if session.isSaving {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-            .padding(.horizontal, 22)
-            .frame(height: 72)
-
-            Divider().opacity(0.5)
-
-            TextField("Notes (optional)", text: $session.notes, axis: .vertical)
+    private var titleField: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "circle")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+            TextField("What’s on your mind?", text: $session.title)
                 .textFieldStyle(.plain)
-                .lineLimit(1...2)
-                .font(.system(size: 14, design: .rounded))
-                .focused($focusedField, equals: .notes)
-                .padding(.horizontal, 24)
-                .frame(minHeight: 48)
-                .accessibilityLabel("Reminder notes")
-
-            Divider().opacity(0.35)
-
-            HStack(spacing: 12) {
-                listPicker
-                dueDateControl
-
-                Spacer(minLength: 8)
-
-                Text("esc")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-
-                Button(action: submit) {
-                    Label("Add Reminder", systemImage: "return")
+                .font(.system(size: 22, weight: .medium, design: .rounded))
+                .focused($titleFocused)
+                .disabled(session.isSaving)
+                .onSubmit(submit)
+                .accessibilityLabel("Reminder title")
+            Button(action: submit) {
+                Group {
+                    if session.isSaving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.up").font(.system(size: 16, weight: .semibold))
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .disabled(!session.canSubmit)
-                .keyboardShortcut(.return, modifiers: [.command])
+                .frame(width: 32, height: 32)
+                .foregroundStyle(session.canSubmit ? Color.white : Color.secondary)
+                .background(session.canSubmit ? Color.accentColor : Color.primary.opacity(0.06), in: Circle())
             }
-            .padding(.horizontal, 20)
-            .frame(height: 62)
-
-            if let errorMessage = session.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 12)
-                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                    .accessibilityLabel("Could not add reminder: \(errorMessage)")
-            }
+            .buttonStyle(.plain)
+            .disabled(!session.canSubmit)
+            .keyboardShortcut(.return, modifiers: .command)
+            .accessibilityLabel("Add reminder")
+            .help("Add reminder (Return)")
         }
-        .animation(.easeOut(duration: reduceMotion ? 0.01 : 0.16), value: session.errorMessage)
+        .frame(height: 36)
     }
 
-    private var listPicker: some View {
-        Picker("List", selection: $session.calendarIdentifier) {
-            ForEach(store.writableCalendars, id: \.calendarIdentifier) { calendar in
-                Text(calendar.title).tag(Optional(calendar.calendarIdentifier))
+    private var shortcuts: some View {
+        HStack(spacing: 6) {
+            Menu {
+                ForEach(store.writableCalendars, id: \.calendarIdentifier) { calendar in
+                    Button {
+                        session.calendarIdentifier = calendar.calendarIdentifier
+                    } label: {
+                        if session.calendarIdentifier == calendar.calendarIdentifier {
+                            Label(calendar.title, systemImage: "checkmark")
+                        } else {
+                            Text(calendar.title)
+                        }
+                    }
+                }
+            } label: {
+                Label(destinationTitle, systemImage: "tray")
+                    .lineLimit(1).frame(maxWidth: 100)
             }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .fixedSize()
-        .accessibilityLabel("Reminder list")
-    }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize(horizontal: false, vertical: true)
+            .capturePill()
+            .disabled(store.writableCalendars.isEmpty)
+            .accessibilityLabel("Reminder list, \(destinationTitle)")
 
-    @ViewBuilder
-    private var dueDateControl: some View {
-        if session.includesDueDate {
-            HStack(spacing: 5) {
-                DatePicker(
-                    "Due",
-                    selection: $session.dueDate,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .labelsHidden()
-                .fixedSize()
-
+            ForEach([ReminderQuickSchedule.today, .tomorrow, .nextWeek]) { schedule in
                 Button {
-                    session.includesDueDate = false
+                    session.schedule(session.isScheduled(schedule) ? .clearDate : schedule)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                    Text(schedule.title)
+                        .capturePill(selected: session.isScheduled(schedule))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear due date")
+                .accessibilityAddTraits(session.isScheduled(schedule) ? .isSelected : [])
             }
-        } else {
-            Button {
-                session.includesDueDate = true
-            } label: {
-                Label("Add Date", systemImage: "calendar")
+
+            Button { showsCalendar.toggle() } label: {
+                Group {
+                    if session.includesDueDate && !hasQuickDate {
+                        Text(session.dueDate, format: .dateTime.month(.abbreviated).day())
+                    } else {
+                        Image(systemName: "calendar")
+                    }
+                }
+                .capturePill(selected: session.includesDueDate && !hasQuickDate)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Choose another date")
+            .popover(isPresented: $showsCalendar) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Due date").font(.headline)
+                    DatePicker("Due date", selection: $session.dueDate, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .labelsHidden()
+                        .onChange(of: session.dueDate) { _, _ in session.includesDueDate = true }
+                    HStack {
+                        Button("Clear date") {
+                            session.includesDueDate = false
+                            showsCalendar = false
+                        }
+                        Spacer()
+                        Button("Done") {
+                            session.includesDueDate = true
+                            showsCalendar = false
+                        }.keyboardShortcut(.defaultAction)
+                    }
+                }
+                .padding(16)
+                .onExitCommand { showsCalendar = false }
+            }
+
+            Spacer(minLength: 0)
+            Button { showsNotes.toggle() } label: {
+                Image(systemName: "note.text")
+                    .capturePill(selected: !session.notes.isEmpty)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reminder notes")
+            .popover(isPresented: $showsNotes) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Notes").font(.headline)
+                    TextField("Add a little detail…", text: $session.notes, axis: .vertical)
+                        .lineLimit(3...6).textFieldStyle(.plain).frame(width: 300)
+                    Button("Done") { showsNotes = false }.keyboardShortcut(.defaultAction)
+                }
+                .padding(16)
+                .onExitCommand { showsNotes = false }
+            }
         }
+        .font(.system(size: 11, weight: .medium))
+    }
+
+    private var destinationTitle: String {
+        store.writableCalendars.first { $0.calendarIdentifier == session.calendarIdentifier }?.title ?? "No list"
+    }
+
+    private var hasQuickDate: Bool {
+        [ReminderQuickSchedule.today, .tomorrow, .nextWeek].contains(where: session.isScheduled)
     }
 
     private var accessView: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 26))
-                .foregroundStyle(.secondary)
-            Text("Reminders access is needed")
-                .font(.headline)
-            Text("NotchDo saves quick captures directly to Apple Reminders.")
-                .foregroundStyle(.secondary)
-
-            if store.authorization == .notDetermined {
-                Button("Continue") {
-                    Task { await store.requestAccess() }
-                }
-                .buttonStyle(.borderedProminent)
-            } else if store.authorization == .requesting {
-                ProgressView()
+        HStack(spacing: 14) {
+            Image(systemName: "lock").font(.title2).foregroundStyle(.secondary)
+            Text("Allow Reminders access to capture a task.").font(.callout)
+            Spacer()
+            if store.authorization == .requesting {
+                ProgressView().controlSize(.small)
+            } else if store.authorization == .notDetermined {
+                Button("Continue") { Task { await store.requestAccess() } }
             } else {
-                Button("Open Privacy Settings", action: AppActions.openRemindersPrivacySettings)
+                Button("Settings", action: AppActions.openRemindersPrivacySettings)
             }
-        }
-        .frame(maxWidth: .infinity, minHeight: 172)
-        .padding(24)
-    }
-
-    private func focusTitle() {
-        DispatchQueue.main.async { focusedField = .title }
+        }.frame(minHeight: 60)
     }
 
     private func submit() {
+        let presentation = session.presentationID
         Task {
-            if await session.submit() {
-                onDismiss()
-            } else {
-                focusTitle()
-            }
+            guard session.presentationID == presentation else { return }
+            let saved = await session.submit()
+            guard session.presentationID == presentation else { return }
+            if saved { onDismiss() }
         }
     }
 }

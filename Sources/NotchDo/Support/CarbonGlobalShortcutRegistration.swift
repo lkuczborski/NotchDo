@@ -49,6 +49,7 @@ final class CarbonGlobalShortcutRegistration: GlobalShortcutRegistration {
         action: @escaping @MainActor () -> Void
     ) -> Bool {
         unregister()
+        guard eventHandler != nil else { return false }
         self.action = action
         let status = RegisterEventHotKey(
             shortcut.keyCode,

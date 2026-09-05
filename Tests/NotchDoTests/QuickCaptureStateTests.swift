@@ -26,7 +26,7 @@ struct QuickCaptureStateTests {
         #expect(draft.title == "Call the dentist")
         #expect(draft.notes == "Ask about Thursday")
         #expect(draft.hasDueDate)
-        #expect(draft.hasDueTime)
+        #expect(!draft.hasDueTime)
         #expect(draft.dueDate == dueDate)
     }
 

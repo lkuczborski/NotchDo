@@ -4,6 +4,18 @@ import Testing
 @Suite("Notch menu tracking", .serialized)
 @MainActor
 struct NotchMenuTrackingStateTests {
+    @Test("Menus owned by capture or Settings do not expand the notch")
+    func ignoresOtherWindows() {
+        var tracking = NotchMenuTrackingState()
+        let interaction = NotchInteractionModel()
+        if tracking.beginTracking(isOwnerActive: false) {
+            interaction.updateTransientInteraction(true)
+        }
+        #expect(!tracking.isTracking)
+        #expect(!interaction.isExpanded)
+        let ended = tracking.endTracking()
+        #expect(!ended)
+    }
     @Test("Menu tracking keeps the panel expanded until the final menu closes")
     func keepsPanelExpanded() async throws {
         let interaction = NotchInteractionModel()

@@ -21,11 +21,13 @@ struct QuickCaptureState: Equatable {
     }
 
     var reminderDraft: ReminderDraft {
-        ReminderDraft(
+        var draft = ReminderDraft(
             title: title,
             notes: notes,
             dueDate: includesDueDate ? dueDate : nil
         )
+        draft.hasDueTime = false
+        return draft
     }
 
     mutating func reset(

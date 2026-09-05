@@ -3,6 +3,7 @@
 @MainActor
 final class FakeGlobalShortcutRegistration: GlobalShortcutRegistration {
     var shouldRegister = true
+    var rejectedShortcuts: [GlobalShortcut] = []
     private(set) var registeredShortcuts: [GlobalShortcut] = []
     private(set) var unregisterCount = 0
     private var action: (@MainActor () -> Void)?
@@ -12,10 +13,9 @@ final class FakeGlobalShortcutRegistration: GlobalShortcutRegistration {
         action: @escaping @MainActor () -> Void
     ) -> Bool {
         registeredShortcuts.append(shortcut)
-        if shouldRegister {
-            self.action = action
-        }
-        return shouldRegister
+        let succeeds = shouldRegister && !rejectedShortcuts.contains(shortcut)
+        self.action = succeeds ? action : nil
+        return succeeds
     }
 
     func unregister() {
