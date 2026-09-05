@@ -14,7 +14,7 @@ struct ReminderRow: View {
     let onComplete: () async -> Bool
 
     @State private var draft: ReminderDraft
-    @State private var isCompleting = false
+    @State private var completionState = ReminderCompletionState()
     @State private var pendingFields: Set<ReminderEditField> = []
     @State private var saveTask: Task<Void, Never>?
     @FocusState private var titleFocused: Bool
@@ -257,7 +257,7 @@ struct ReminderRow: View {
                 )
                 .frame(width: 18, height: 18)
 
-            if isCompleting {
+            if completionState.isCompleting {
                 Circle()
                     .fill(calendarColor)
                     .frame(width: 18, height: 18)
@@ -273,6 +273,7 @@ struct ReminderRow: View {
                     .foregroundStyle(.white.opacity(0.42))
             }
         }
+        .animation(.smooth(duration: 0.16, extraBounce: 0), value: completionState.isCompleting)
         .frame(width: 22, height: 22)
         .contentShape(Circle())
         .onTapGesture(perform: complete)
@@ -482,19 +483,12 @@ struct ReminderRow: View {
     }
 
     private func complete() {
-        guard isEditable, !isCompleting else { return }
-        flushPendingSave()
-        withAnimation(.smooth(duration: 0.16, extraBounce: 0)) {
-            isCompleting = true
-        }
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(160))
-            guard !Task.isCancelled else { return }
-            let completed = await onComplete()
-            guard !completed else { return }
-            withAnimation(.easeOut(duration: 0.12)) {
-                isCompleting = false
-            }
+            await completionState.complete(
+                isEditable: isEditable,
+                prepare: flushPendingSave,
+                action: onComplete
+            )
         }
     }
 
