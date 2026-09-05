@@ -250,14 +250,18 @@ struct ReminderListView: View {
                 Circle()
                     .fill(store.selectedCalendarColor.opacity(0.1))
                     .frame(width: 44, height: 44)
-                Image(systemName: "checkmark")
+                Image(systemName: store.selectedCalendarIsWritable ? "checkmark" : "lock.fill")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(store.selectedCalendarColor)
             }
-            Text("Nothing left here")
+            Text(store.selectedCalendarIsWritable ? "Nothing left here" : "No open reminders")
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.84))
-            Text("A very good kind of empty.")
+            Text(
+                store.selectedCalendarIsWritable
+                    ? "A very good kind of empty."
+                    : "This read-only list is currently empty."
+            )
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.5))
         }
