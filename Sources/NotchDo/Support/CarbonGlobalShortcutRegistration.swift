@@ -7,12 +7,16 @@ final class CarbonGlobalShortcutRegistration: GlobalShortcutRegistration {
     private var hotKey: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
     private var action: (@MainActor () -> Void)?
+    private var pressState = GlobalShortcutPressState()
 
     init() {
-        var eventType = EventTypeSpec(
+        var eventTypes = [EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: OSType(kEventHotKeyPressed)
-        )
+        ), EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: OSType(kEventHotKeyReleased)
+        )]
         InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, userData in
@@ -34,11 +38,16 @@ final class CarbonGlobalShortcutRegistration: GlobalShortcutRegistration {
                 }
                 let registration = Unmanaged<CarbonGlobalShortcutRegistration>
                     .fromOpaque(userData).takeUnretainedValue()
-                Task { @MainActor in registration.action?() }
+                let isPressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
+                Task { @MainActor in
+                    if registration.pressState.update(isPressed: isPressed) {
+                        registration.action?()
+                    }
+                }
                 return noErr
             },
-            1,
-            &eventType,
+            2,
+            &eventTypes,
             Unmanaged.passUnretained(self).toOpaque(),
             &eventHandler
         )
@@ -72,6 +81,7 @@ final class CarbonGlobalShortcutRegistration: GlobalShortcutRegistration {
             self.hotKey = nil
         }
         action = nil
+        pressState = GlobalShortcutPressState()
     }
 
     deinit {
