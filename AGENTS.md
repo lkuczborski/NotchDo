@@ -22,6 +22,7 @@
 - Treat synchronization as two-way wherever public EventKit APIs permit it. Handle authorization, external-change notifications, stale async reloads, optimistic updates, rollback, and visible failures deliberately.
 - Preserve the reminder order returned by EventKit. Its public API exposes no manual sort-position metadata, so do not claim or implement persistent reordering without a supported API.
 - Tests must use the `ReminderEventStore` seam and fakes; never read or modify the user's real Reminders data.
+- Always use the isolated demo app for manual feature testing, UI verification, screenshots, and recordings. Follow the [demo testing and recording guide](script/demo-recording.md); never test features against the user's real reminders.
 
 ## Tests
 
@@ -33,6 +34,6 @@
 
 - Run release tests after behavioral changes: `swift test --configuration release`.
 - Run a release build for production-code changes: `swift build --configuration release`.
-- For app-level or UI changes, bundle, launch, and verify with `./script/build_and_run.sh --verify`; use the other modes documented in `README.md` when debugging.
+- For app-level or UI changes, launch `./script/demo.sh features` and verify the behavior with fictional reminders as described in the [demo testing and recording guide](script/demo-recording.md). Use the other demo scenarios when checking first-list or permission states.
 - Keep `README.md` user-facing. Put maintainer-only signing, notarization, and publishing logic in `script/release.sh` rather than expanding the README.
 - Do not modify generated/local artifacts in `.build/`, `dist/`, `Design/`, or QA image files.

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Dedicated recording build. Never use this artifact for distribution.
+# Isolated feature-testing and recording build. Never use this artifact for distribution.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCENARIO="${1:-features}"
 case "$SCENARIO" in features|first-list|permission) ;; *) echo "usage: $0 [features|first-list|permission]" >&2; exit 2 ;; esac
-OUTPUT="${NOTCHDO_DEMO_OUTPUT:-/tmp/notchdo-v0.3.0-demo}"
+OUTPUT="${NOTCHDO_DEMO_OUTPUT:-/tmp/notchdo-demo}"
 APP="$OUTPUT/NotchDo Demo.app"
 swift build --package-path "$ROOT" --scratch-path "$OUTPUT/build" --configuration release -Xswiftc -DNOTCHDO_DEMO --product NotchDo
 BIN="$(swift build --package-path "$ROOT" --scratch-path "$OUTPUT/build" --configuration release -Xswiftc -DNOTCHDO_DEMO --show-bin-path)/NotchDo"
