@@ -7,12 +7,10 @@ struct NotchHeaderView: View {
     let onInteraction: () -> Void
     let onSearch: () -> Void
     let onTransientInteractionChange: (Bool) -> Void
-    let syncStatusFormatter: ReminderSyncStatusFormatter
+    let onCreateList: () -> Void
 
     @State private var isCalendarPickerPresented = false
     @State private var isOptionsPresented = false
-    @State private var isCreateListPresented = false
-    @State private var newListTitle = ""
     @FocusState private var focusedPickerSelection: ReminderPickerSelection?
     @Environment(\.openSettings) private var openSettings
 
@@ -21,17 +19,17 @@ struct NotchHeaderView: View {
         onInteraction: @escaping () -> Void,
         onSearch: @escaping () -> Void,
         onTransientInteractionChange: @escaping (Bool) -> Void,
-        syncStatusFormatter: ReminderSyncStatusFormatter = .live
+        onCreateList: @escaping () -> Void
     ) {
         self.store = store
         self.onInteraction = onInteraction
         self.onSearch = onSearch
         self.onTransientInteractionChange = onTransientInteractionChange
-        self.syncStatusFormatter = syncStatusFormatter
+        self.onCreateList = onCreateList
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(spacing: 12) {
             listSelector
 
             Spacer(minLength: 10)
@@ -61,7 +59,6 @@ struct NotchHeaderView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 30, height: 30)
-            .padding(.top, 2)
             .popover(isPresented: $isOptionsPresented, arrowEdge: .top) {
                 options
             }
@@ -79,35 +76,23 @@ struct NotchHeaderView: View {
         Button {
             isCalendarPickerPresented.toggle()
         } label: {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(spacing: 10) {
                 TaskCountBadgeTarget()
-                    .padding(.top, 4)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 7) {
-                        Text(store.selectedCalendarTitle)
-                            .font(.system(size: 21, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
+                HStack(spacing: 7) {
+                    Text(store.selectedCalendarTitle)
+                        .font(.system(size: 21, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
 
-                        if store.authorization == .fullAccess {
-                            Image(systemName: "chevron.down")
-                                .foregroundStyle(.white.opacity(0.42))
-                                .font(.system(size: 9, weight: .bold))
-                        }
-                    }
-
-                    if store.selectedCalendar != nil {
-                        ReminderSyncStatusView(
-                            syncState: store.syncState,
-                            lastSyncedAt: store.lastSyncedAt,
-                            isReadOnly: !store.selectedCalendarIsWritable,
-                            formatter: syncStatusFormatter
-                        )
+                    if store.authorization == .fullAccess {
+                        Image(systemName: "chevron.down")
+                            .foregroundStyle(.white.opacity(0.42))
+                            .font(.system(size: 9, weight: .bold))
                     }
                 }
             }
-            .frame(minHeight: 34)
+            .frame(height: 30)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -120,24 +105,6 @@ struct NotchHeaderView: View {
             reportTransientInteraction()
         }
         .accessibilityLabel(listSelectorAccessibilityLabel)
-        .alert("New Reminder List", isPresented: $isCreateListPresented) {
-            TextField("List name", text: $newListTitle)
-            Button("Cancel", role: .cancel) {
-                newListTitle = ""
-            }
-            Button("Create") {
-                let title = newListTitle
-                newListTitle = ""
-                Task {
-                    if await store.createCalendar(title: title) {
-                        isCalendarPickerPresented = false
-                    }
-                }
-            }
-            .disabled(newListTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        } message: {
-            Text("The list is created directly in Reminders using EventKit.")
-        }
     }
 
     private var calendarList: some View {
@@ -164,22 +131,23 @@ struct NotchHeaderView: View {
                             Text(scope.title)
                                 .lineLimit(1)
                             Spacer(minLength: 2)
-                            if store.selectedSmartScope == scope {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(Color.notchAccent)
-                            }
                         }
                         .font(.system(size: 11.5, weight: .medium, design: .rounded))
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 7)
                         .frame(height: 28)
-                        .contentShape(Rectangle())
+                        .background(
+                            Color.black.opacity(store.selectedSmartScope == scope ? 0.3 : 0),
+                            in: Capsule()
+                        )
+                        .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .focusable()
+                    .focusEffectDisabled()
                     .focused($focusedPickerSelection, equals: .smart(scope))
                     .accessibilityLabel("Show \(scope.title) reminders")
+                    .accessibilityAddTraits(store.selectedSmartScope == scope ? .isSelected : [])
                 }
             }
 
@@ -231,6 +199,7 @@ struct NotchHeaderView: View {
                             }
                             .buttonStyle(.plain)
                             .focusable()
+                            .focusEffectDisabled()
                             .focused(
                                 $focusedPickerSelection,
                                 equals: .calendar(calendar.calendarIdentifier)
@@ -246,7 +215,8 @@ struct NotchHeaderView: View {
                 .padding(.vertical, 2)
 
             Button {
-                isCreateListPresented = true
+                isCalendarPickerPresented = false
+                onCreateList()
             } label: {
                 Label("New List", systemImage: "plus")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -319,7 +289,7 @@ struct NotchHeaderView: View {
 
     private func reportTransientInteraction() {
         onTransientInteractionChange(
-            isCalendarPickerPresented || isOptionsPresented || isCreateListPresented
+            isCalendarPickerPresented || isOptionsPresented
         )
     }
 
@@ -348,23 +318,10 @@ struct NotchHeaderView: View {
     }
 
     private var listSelectorAccessibilityLabel: String {
-        var parts = [
+        let parts = [
             "Reminder list: \(store.selectedCalendarTitle)",
             "\(store.reminders.count) open reminders"
         ]
-        if store.selectedSmartScope == nil, store.selectedCalendar != nil, !store.selectedCalendarIsWritable {
-            parts.append("Read only")
-        }
-        switch store.syncState {
-        case .syncing:
-            parts.append("Updating")
-        case .failed:
-            parts.append("Update failed")
-        case .idle, .synced:
-            if let lastSyncedAt = store.lastSyncedAt {
-                parts.append(syncStatusFormatter.updatedText(for: lastSyncedAt))
-            }
-        }
         return parts.joined(separator: ", ")
     }
 

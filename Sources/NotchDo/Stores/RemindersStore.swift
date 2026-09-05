@@ -216,7 +216,7 @@ final class RemindersStore: NSObject {
             lastAddedReminderIdentifier = identifier
             return true
         } catch {
-            syncState = .failed(error.localizedDescription)
+            syncState = .failed("Couldn’t add the reminder. \(error.localizedDescription)")
             return false
         }
     }
@@ -253,7 +253,7 @@ final class RemindersStore: NSObject {
         } catch {
             reminder.isCompleted = previousValue
             reminders = previousReminders
-            syncState = .failed(error.localizedDescription)
+            syncState = .failed("Couldn’t change the reminder’s completion. \(error.localizedDescription)")
             return false
         }
     }
@@ -285,7 +285,7 @@ final class RemindersStore: NSObject {
             await reload()
             return true
         } catch {
-            syncState = .failed(error.localizedDescription)
+            syncState = .failed("Couldn’t create the list. \(error.localizedDescription)")
             return false
         }
     }
@@ -302,7 +302,7 @@ final class RemindersStore: NSObject {
             await reload()
         } catch {
             reminder.title = previousTitle
-            syncState = .failed(error.localizedDescription)
+            syncState = .failed("Couldn’t rename the reminder. \(error.localizedDescription)")
         }
     }
 
@@ -366,7 +366,7 @@ final class RemindersStore: NSObject {
             reminder.dueDateComponents = previousDueDate
             reminder.priority = previousPriority
             reminder.recurrenceRules = previousRecurrenceRules
-            syncState = .failed(error.localizedDescription)
+            syncState = .failed("Couldn’t save the reminder. \(error.localizedDescription)")
             return .failed
         }
     }
@@ -387,7 +387,7 @@ final class RemindersStore: NSObject {
             try eventStore.remove(reminder, commit: true)
             await reload()
         } catch {
-            syncState = .failed(error.localizedDescription)
+            syncState = .failed("Couldn’t delete the reminder. \(error.localizedDescription)")
         }
     }
 
@@ -410,7 +410,7 @@ final class RemindersStore: NSObject {
                 }
             } catch {
                 authorization = .denied
-                syncState = .failed(error.localizedDescription)
+                syncState = .failed("Couldn’t access Reminders. \(error.localizedDescription)")
             }
         case .notDetermined:
             authorization = .notDetermined

@@ -7,6 +7,7 @@ struct AccessStateView: View {
     let showsProgress: Bool
     let actionTitle: String?
     let action: (() -> Void)?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 12) {
@@ -15,7 +16,7 @@ struct AccessStateView: View {
                     .fill(.white.opacity(0.055))
                     .frame(width: 52, height: 52)
 
-                if showsProgress {
+                if showsProgress && !reduceMotion {
                     ProgressView()
                         .controlSize(.small)
                         .tint(Color.notchAccent)
@@ -30,11 +31,13 @@ struct AccessStateView: View {
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.9))
 
-            Text(message)
+            if !message.isEmpty {
+                Text(message)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.42))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 270)
+            }
 
             if let actionTitle, let action {
                 Button(actionTitle, action: action)

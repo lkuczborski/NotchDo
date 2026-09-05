@@ -8,11 +8,6 @@ struct ReminderSearchState: Equatable {
         focusRequest &+= 1
     }
 
-    mutating func clear() {
-        query = ""
-        focusRequest &+= 1
-    }
-
     mutating func dismiss() {
         query = ""
         isPresented = false

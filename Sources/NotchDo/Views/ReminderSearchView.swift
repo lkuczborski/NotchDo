@@ -5,7 +5,6 @@ struct ReminderSearchView: View {
     let focusRequest: Int
     let resultCount: Int
     let totalCount: Int
-    let onClear: () -> Void
     let onDismiss: () -> Void
 
     @FocusState private var isFocused: Bool
@@ -25,24 +24,14 @@ struct ReminderSearchView: View {
                 .accessibilityLabel("Search reminders")
                 .accessibilityValue(resultDescription)
 
-            if !query.isEmpty {
-                Button(action: onClear) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.42))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-                .help("Clear Search")
-            }
-
             Button(action: onDismiss) {
-                Text("Done")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.62))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.42))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close search")
+            .help("Close Search")
         }
         .padding(.horizontal, 12)
         .frame(height: 36)

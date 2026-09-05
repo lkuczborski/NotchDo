@@ -17,20 +17,6 @@ struct ReminderSearchStateTests {
         #expect(state.focusRequest != firstRequest)
     }
 
-    @Test("Clear keeps search open and requests focus")
-    func clear() {
-        var state = ReminderSearchState()
-        state.present()
-        state.query = "plan"
-        let priorRequest = state.focusRequest
-
-        state.clear()
-
-        #expect(state.isPresented)
-        #expect(state.query.isEmpty)
-        #expect(state.focusRequest != priorRequest)
-    }
-
     @Test("Dismiss clears the ephemeral query")
     func dismiss() {
         var state = ReminderSearchState()

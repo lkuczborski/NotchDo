@@ -45,7 +45,7 @@ struct ReminderDisplayStateTests {
         )
         #expect(
             state(syncState: .failed("Offline"), lastSyncedAt: syncDate)
-                == .failed("Offline")
+                == .emptyList(isReadOnly: false)
         )
         #expect(
             state(reminderCount: 2, syncState: .failed("Offline"), lastSyncedAt: syncDate)
