@@ -19,6 +19,7 @@ final class FakeReminderEventStore: ReminderEventStore {
     var removedReminders: [EKReminder] = []
     var accessRequestCount = 0
     var fetchCount = 0
+    var predicateCalendarIdentifiers: [[String]] = []
     var completesFetchImmediately = true
     var pendingFetchCompletions: [([EKReminder]?) -> Void] = []
 
@@ -49,7 +50,8 @@ final class FakeReminderEventStore: ReminderEventStore {
     }
 
     func predicateForReminders(in calendars: [EKCalendar]?) -> NSPredicate {
-        NSPredicate(value: true)
+        predicateCalendarIdentifiers.append(calendars?.map(\.calendarIdentifier) ?? [])
+        return NSPredicate(value: true)
     }
 
     func fetchReminders(

@@ -13,12 +13,14 @@ final class RemindersStore: NSObject {
     private(set) var calendars: [EKCalendar] = []
     private(set) var reminders: [EKReminder] = []
     private(set) var selectedCalendarIdentifier: String?
+    private(set) var selectedSmartScope: ReminderSmartScope?
     private(set) var lastSyncedAt: Date?
     private(set) var lastAddedReminderIdentifier: String?
     private(set) var recentlyCompletedReminder: EKReminder?
 
     private let eventStore: any ReminderEventStore
     private let now: () -> Date
+    private let calendar: Calendar
     private let userDefaults: UserDefaults?
     private let completionUndoDuration: Duration
     private let completionUndoSleep: @MainActor (Duration) async -> Void
@@ -29,6 +31,7 @@ final class RemindersStore: NSObject {
     override init() {
         eventStore = EKEventStore()
         now = Date.init
+        calendar = .autoupdatingCurrent
         userDefaults = .standard
         completionUndoDuration = .seconds(5)
         completionUndoSleep = { duration in
@@ -41,6 +44,7 @@ final class RemindersStore: NSObject {
     init(
         eventStore: any ReminderEventStore,
         now: @escaping () -> Date = Date.init,
+        calendar: Calendar = .autoupdatingCurrent,
         userDefaults: UserDefaults? = nil,
         completionUndoDuration: Duration = .seconds(5),
         completionUndoSleep: @escaping @MainActor (Duration) async -> Void = { duration in
@@ -49,6 +53,7 @@ final class RemindersStore: NSObject {
     ) {
         self.eventStore = eventStore
         self.now = now
+        self.calendar = calendar
         self.userDefaults = userDefaults
         self.completionUndoDuration = completionUndoDuration
         self.completionUndoSleep = completionUndoSleep
@@ -70,11 +75,13 @@ final class RemindersStore: NSObject {
     }
 
     var selectedCalendarTitle: String {
-        selectedCalendar?.title ?? "Reminders"
+        selectedSmartScope?.title ?? selectedCalendar?.title ?? "Reminders"
     }
 
     var selectedCalendarIsWritable: Bool {
-        guard authorization == .fullAccess, let selectedCalendar else { return false }
+        guard selectedSmartScope == nil,
+              authorization == .fullAccess,
+              let selectedCalendar else { return false }
         return eventStore.allowsContentModifications(in: selectedCalendar)
     }
 
@@ -105,15 +112,24 @@ final class RemindersStore: NSObject {
         let generation = reloadGeneration
 
         guard authorization == .fullAccess else { return }
-        guard let calendar = selectedCalendar else {
+        guard selectedSmartScope != nil || selectedCalendar != nil else {
+            reminders = []
+            syncState = .idle
+            return
+        }
+        guard selectedSmartScope == nil || !calendars.isEmpty else {
             reminders = []
             syncState = .idle
             return
         }
 
-        let calendarIdentifier = calendar.calendarIdentifier
+        let requestedScope = selectedSmartScope
+        let requestedCalendarIdentifier = selectedCalendarIdentifier
+        let requestedCalendars = requestedScope == nil
+            ? selectedCalendar.map { [$0] } ?? []
+            : calendars
         syncState = .syncing
-        let predicate = eventStore.predicateForReminders(in: [calendar])
+        let predicate = eventStore.predicateForReminders(in: requestedCalendars)
         let fetched: [EKReminder] = await withCheckedContinuation { continuation in
             _ = eventStore.fetchReminders(matching: predicate) { reminders in
                 continuation.resume(returning: reminders ?? [])
@@ -121,9 +137,20 @@ final class RemindersStore: NSObject {
         }
 
         guard generation == reloadGeneration,
-              selectedCalendarIdentifier == calendarIdentifier else { return }
+              selectedSmartScope == requestedScope,
+              selectedCalendarIdentifier == requestedCalendarIdentifier else { return }
 
-        let incompleteReminders = fetched.filter { !$0.isCompleted }
+        let membership = ReminderSmartScopeMembership(now: now(), calendar: calendar)
+        let incompleteReminders = fetched.filter { reminder in
+            if let requestedScope {
+                return membership.contains(
+                    isCompleted: reminder.isCompleted,
+                    dueDateComponents: reminder.dueDateComponents,
+                    in: requestedScope
+                )
+            }
+            return !reminder.isCompleted
+        }
         reminders = incompleteReminders
         lastSyncedAt = now()
         syncState = .synced
@@ -131,7 +158,15 @@ final class RemindersStore: NSObject {
 
     func selectCalendar(_ identifier: String) {
         guard calendars.contains(where: { $0.calendarIdentifier == identifier }) else { return }
+        selectedSmartScope = nil
         setSelectedCalendarIdentifier(identifier)
+        Task { await reload() }
+    }
+
+    func selectSmartScope(_ scope: ReminderSmartScope) {
+        guard selectedSmartScope != scope else { return }
+        dismissCompletionUndo()
+        selectedSmartScope = scope
         Task { await reload() }
     }
 
@@ -191,7 +226,8 @@ final class RemindersStore: NSObject {
         guard canModify(reminder) else { return false }
         let previousValue = reminder.isCompleted
         let previousReminders = reminders
-        let calendarIdentifier = reminder.calendar.calendarIdentifier
+        let selectedScope = selectedSmartScope
+        let completionCalendarIdentifier = selectedCalendarIdentifier
         reminder.isCompleted = completed
         reminders.removeAll {
             $0.calendarItemIdentifier == reminder.calendarItemIdentifier
@@ -209,7 +245,8 @@ final class RemindersStore: NSObject {
             await reload()
             if let completionGeneration,
                completionUndoGeneration == completionGeneration,
-               selectedCalendarIdentifier == calendarIdentifier {
+               self.selectedSmartScope == selectedScope,
+               self.selectedCalendarIdentifier == completionCalendarIdentifier {
                 presentCompletionUndo(for: reminder)
             }
             return true
@@ -243,6 +280,7 @@ final class RemindersStore: NSObject {
         do {
             let calendar = try eventStore.createReminderCalendar(title: cleanTitle)
             loadCalendars()
+            selectedSmartScope = nil
             setSelectedCalendarIdentifier(calendar.calendarIdentifier)
             await reload()
             return true
@@ -315,8 +353,12 @@ final class RemindersStore: NSObject {
         syncState = .syncing
         do {
             try eventStore.save(reminder, commit: true)
-            lastSyncedAt = now()
-            syncState = .synced
+            if selectedSmartScope != nil {
+                await reload()
+            } else {
+                lastSyncedAt = now()
+                syncState = .synced
+            }
             return .saved(rejecting: rejectedFields)
         } catch {
             reminder.title = previousTitle
@@ -389,6 +431,7 @@ final class RemindersStore: NSObject {
         reloadGeneration &+= 1
         calendars = []
         reminders = []
+        selectedSmartScope = nil
         if !setSelectedCalendarIdentifier(nil) {
             dismissCompletionUndo()
         }
