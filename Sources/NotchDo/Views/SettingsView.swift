@@ -12,7 +12,11 @@ struct SettingsView: View {
     init(store: RemindersStore, globalShortcut: GlobalShortcutStore) {
         self.store = store
         self.globalShortcut = globalShortcut
+        #if NOTCHDO_DEMO
+        _launchAtLogin = State(initialValue: LaunchAtLoginStore(service: DemoLoginItemService()))
+        #else
         _launchAtLogin = State(initialValue: LaunchAtLoginStore())
+        #endif
     }
 
     init(

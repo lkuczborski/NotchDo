@@ -1,3 +1,4 @@
+#if !NOTCHDO_DEMO
 import EventKit
 
 extension EKEventStore: ReminderEventStore {
@@ -48,3 +49,5 @@ extension EKEventStore: ReminderEventStore {
         return calendar
     }
 }
+
+#endif

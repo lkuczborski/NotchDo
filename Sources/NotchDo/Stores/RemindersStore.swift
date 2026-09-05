@@ -29,7 +29,12 @@ final class RemindersStore: NSObject {
     private var completionUndoExpiryTask: Task<Void, Never>?
 
     override init() {
+        #if NOTCHDO_DEMO
+        precondition(Bundle.main.bundleIdentifier == "com.luku.NotchDo.Demo")
+        eventStore = DemoReminderEventStore(scenario: ProcessInfo.processInfo.environment["NOTCHDO_DEMO_SCENARIO"] ?? "features")
+        #else
         eventStore = EKEventStore()
+        #endif
         now = Date.init
         calendar = .autoupdatingCurrent
         userDefaults = .standard

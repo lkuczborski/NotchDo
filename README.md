@@ -17,34 +17,71 @@ NotchDo uses Apple Reminders directly through EventKit. It has no account,
 cloud service, analytics pipeline, or separate task database.
 
 <p align="center">
-  <img src="docs/assets/notchdo-demo.gif" alt="NotchDo expanding from the MacBook notch to manage reminders" width="640">
+  <img src="docs/assets/notchdo-demo.gif" alt="Capture a reminder from anywhere, open it at the notch, and choose a smart list" width="720">
 </p>
 
 ## Highlights
 
-- Native notch-aware panel that follows the active display and works across
-  Spaces
-- Immediate hover expansion with a compositor-friendly, continuously rounded
-  transition
-- Immediately add new reminder after hover, you can start typing right away
-- Configurable system-wide shortcut for a Spotlight-style quick reminder panel
-- Compact quick capture with inline submission, Today / Tomorrow / Next Week
-  shortcuts, an optional date picker, notes, and writable list selection
-- List-colored open-task indicator that transitions into the expanded header
-- Apple Reminders list selection, list creation, and automatic external-change
-  refresh
-- Keyboard-ready bottom composer with Return and submit-button actions
-- Fast in-memory search for the current list with Command-F
-- Create, complete, and swipe-to-delete interactions
-- New reminders scroll into view after EventKit saves them
-- Inline editing for title, notes, due date and time, all-day state, priority,
-  and supported recurrence rules
-- Escape and outside clicks collapse the active editor; scrolling leaves it open
-- Purpose-built permission, loading, empty, and error states
+- A native, notch-aware panel with fluid hover expansion, keyboard input,
+  and a list-colored open-task indicator
+- **Global Quick Capture:** press **Control–Option–R** from any app to open
+  a translucent, Spotlight-style reminder panel; customize the shortcut in Settings
+- **Capture with context:** add a title, notes, destination list, and due date;
+  use Today, Tomorrow, Next Week, or the date picker
+- **Smart scopes:** review Today, Overdue, Scheduled, and All Open across your
+  Reminders lists, then edit each reminder in its original list
+- **Instant search:** press **Command–F** to filter loaded reminder titles in
+  the current list or smart scope; matching ignores case and accents
+- Create lists, add reminders, complete with a brief Undo action, and swipe to delete
+- Edit title, notes, due date and time, all-day state, priority, and supported
+  recurrence rules inline
+- Clear permission, first-list, loading, empty, and read-only states, with
+  operation-specific errors when a change cannot be saved
+- Automatic refresh after external Reminders changes and native Launch at Login
 
-<p align="center">
-  <img src="docs/assets/notchdo-screenshot.jpeg" alt="NotchDo showing Apple Reminders beneath the MacBook notch" width="960">
-</p>
+## Install
+
+Download the universal ZIP from [Releases](https://github.com/lkuczborski/NotchDo/releases/latest),
+unzip it, and move **NotchDo.app** to **Applications**. Open NotchDo and allow
+full Reminders access when prompted. The app lives at the notch rather than
+in the Dock.
+
+## Everyday use
+
+**Capture from anywhere.** Press **Control–Option–R** to open Quick Capture.
+Type a title, add optional notes, choose a writable list, and set a date.
+Press Return or use the submit button to save. Escape dismisses the panel.
+Open NotchDo Settings to record your preferred global shortcut; if another
+app already owns it, NotchDo reports the conflict and retains the previous shortcut.
+
+**Work from the notch.** Move the pointer to the notch to expand your list.
+Start typing in the bottom composer to add a reminder to the selected list.
+Click a reminder to edit its details. Escape or an outside click closes the
+active editor; scrolling keeps it open. Complete a reminder with its check
+control and use Undo to restore the most recent completion. Repeating reminders
+ask for confirmation before deletion.
+
+**Choose a list or a smart scope.** Use the header picker to switch between
+lists, create a list, or open Today, Overdue, Scheduled, or All Open. Smart
+scopes gather matching incomplete reminders across lists. The bottom composer
+is hidden there because there is no single destination; use Quick Capture
+and choose a list to add a reminder. Read-only lists remain browsable, with
+changes disabled.
+
+**Find a reminder.** Press **Command–F** or use the search button. Results
+update as you type without changing EventKit's order. Search matches titles:
+for example, `cafe` also finds `café`. Use the single close-search button or
+Escape to return to the unfiltered view. Search covers the current loaded
+list or smart scope, not completed reminders or notes.
+
+**Start fresh.** If there are no lists, use Create List to make your first
+one. An empty writable list offers the composer immediately. Empty smart
+scopes explain that there are no matching reminders.
+
+| Quick Capture | List view | Smart lists |
+| :---: | :---: | :---: |
+| <img src="docs/assets/global-capture.jpg" alt="Global Quick Capture with list, due date, and notes controls" width="280"> | <img src="docs/assets/list-view.png" alt="Weekend reminders expanded beneath the notch" width="280"> | <img src="docs/assets/smart-list.png" alt="Today showing reminders from multiple lists" width="280"> |
+| Add a reminder from any app, with a list, date, and notes. | Review and add reminders directly at the notch. | View Today, Overdue, Scheduled, or All Open across your lists. |
 
 ## Requirements
 
@@ -72,9 +109,6 @@ Available modes:
 | `./script/build_and_run.sh --logs` | Launch and stream application logs |
 | `./script/build_and_run.sh --telemetry` | Stream logs for the NotchDo subsystem |
 
-The Codex Run action is configured through
-`.codex/environments/environment.toml` and invokes the same script.
-
 Build output is staged at `dist/NotchDo.app`. Both `dist/` and SwiftPM build
 artifacts are intentionally excluded from version control.
 
@@ -86,9 +120,6 @@ Reminders permission. macOS retains the decision for subsequent launches.
 If permission was denied previously, open:
 
 **System Settings → Privacy & Security → Reminders**
-
-The development bundle uses a stable identifier and designated signing
-requirement so repeated local builds are recognized as the same application.
 
 ## Data and privacy
 
@@ -106,8 +137,6 @@ This preserves fields that NotchDo does not currently expose for editing.
   a reorder interaction that it cannot sync back to Reminders.
 - Features unavailable through the public EventKit API remain owned by Apple
   Reminders and cannot be edited independently in NotchDo.
-- The development runner uses ad-hoc signing; published builds require the
-  maintainer's separate distribution workflow.
 
 ## Project layout
 
