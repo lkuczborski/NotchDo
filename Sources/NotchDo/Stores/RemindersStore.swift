@@ -78,6 +78,11 @@ final class RemindersStore: NSObject {
         return eventStore.allowsContentModifications(in: selectedCalendar)
     }
 
+    var writableCalendars: [EKCalendar] {
+        guard authorization == .fullAccess else { return [] }
+        return calendars.filter { eventStore.allowsContentModifications(in: $0) }
+    }
+
     func canModify(_ reminder: EKReminder) -> Bool {
         guard authorization == .fullAccess, let calendar = reminder.calendar else { return false }
         return eventStore.allowsContentModifications(in: calendar)
@@ -136,15 +141,39 @@ final class RemindersStore: NSObject {
 
     @discardableResult
     func addReminder(title: String) async -> Bool {
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        await addReminder(
+            draft: ReminderDraft(title: title),
+            calendarIdentifier: selectedCalendarIdentifier
+        )
+    }
+
+    @discardableResult
+    func addReminder(
+        draft: ReminderDraft,
+        calendarIdentifier: String?
+    ) async -> Bool {
+        let cleanTitle = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty,
-              let calendar = selectedCalendar,
-              selectedCalendarIsWritable else { return false }
+              authorization == .fullAccess,
+              let calendar = calendars.first(where: {
+                  $0.calendarIdentifier == calendarIdentifier
+              }),
+              eventStore.allowsContentModifications(in: calendar) else { return false }
 
         let reminder = eventStore.makeReminder()
         reminder.calendar = calendar
         reminder.title = cleanTitle
+        let cleanNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        reminder.notes = cleanNotes.isEmpty ? nil : draft.notes
+        reminder.dueDateComponents = draft.dueMode == .none
+            ? nil
+            : Self.dueDateComponents(for: draft)
+        reminder.priority = draft.priority.rawValue
+        if draft.recurrence != .custom {
+            reminder.recurrenceRules = draft.recurrence.recurrenceRule.map { [$0] }
+        }
 
+        syncState = .syncing
         do {
             try eventStore.save(reminder, commit: true)
             let identifier = reminder.calendarItemIdentifier

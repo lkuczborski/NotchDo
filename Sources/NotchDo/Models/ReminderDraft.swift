@@ -10,6 +10,24 @@ struct ReminderDraft: Equatable {
     var priority: ReminderPriorityOption
     var recurrence: ReminderRecurrenceOption
 
+    init(
+        title: String = "",
+        notes: String = "",
+        dueDate: Date? = nil,
+        priority: ReminderPriorityOption = .none,
+        recurrence: ReminderRecurrenceOption = .never
+    ) {
+        self.title = title
+        self.notes = notes
+        hasDueDate = dueDate != nil
+        hasDueTime = dueDate != nil
+        self.dueDate = dueDate
+            ?? Calendar.autoupdatingCurrent.date(byAdding: .hour, value: 1, to: Date())
+            ?? Date()
+        self.priority = priority
+        self.recurrence = recurrence
+    }
+
     init(reminder: EKReminder, dueMode: ReminderDueMode? = nil) {
         title = reminder.title ?? ""
         notes = reminder.notes ?? ""

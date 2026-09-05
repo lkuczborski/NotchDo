@@ -4,17 +4,24 @@ import SwiftUI
 @MainActor
 struct SettingsView: View {
     let store: RemindersStore
+    let globalShortcut: GlobalShortcutStore
     @State private var launchAtLogin: LaunchAtLoginStore
 
     @Environment(\.scenePhase) private var scenePhase
 
-    init(store: RemindersStore) {
+    init(store: RemindersStore, globalShortcut: GlobalShortcutStore) {
         self.store = store
+        self.globalShortcut = globalShortcut
         _launchAtLogin = State(initialValue: LaunchAtLoginStore())
     }
 
-    init(store: RemindersStore, launchAtLogin: LaunchAtLoginStore) {
+    init(
+        store: RemindersStore,
+        globalShortcut: GlobalShortcutStore,
+        launchAtLogin: LaunchAtLoginStore
+    ) {
         self.store = store
+        self.globalShortcut = globalShortcut
         _launchAtLogin = State(initialValue: launchAtLogin)
     }
 
@@ -60,6 +67,10 @@ struct SettingsView: View {
                         .accessibilityLabel("Launch at Login error: \(errorMessage)")
                 }
             }
+
+            Divider()
+
+            ShortcutRecorderView(store: globalShortcut)
 
             Divider()
 

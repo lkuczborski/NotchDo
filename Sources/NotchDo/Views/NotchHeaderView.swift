@@ -172,6 +172,11 @@ struct NotchHeaderView: View {
                 Task { await store.reload() }
             }
 
+            optionButton("Quick Reminder…", systemImage: "bolt.fill") {
+                isOptionsPresented = false
+                AppActions.requestQuickCapture()
+            }
+
             optionButton("Open Reminders", systemImage: "arrow.up.forward.app") {
                 isOptionsPresented = false
                 AppActions.openReminders()

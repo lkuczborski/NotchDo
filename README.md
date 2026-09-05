@@ -27,6 +27,9 @@ cloud service, analytics pipeline, or separate task database.
 - Immediate hover expansion with a compositor-friendly, continuously rounded
   transition
 - Immediately add new reminder after hover, you can start typing right away
+- Configurable system-wide shortcut for a Spotlight-style quick reminder panel
+- Compact quick capture with inline submission, Today / Tomorrow / Next Week
+  shortcuts, an optional date picker, notes, and writable list selection
 - List-colored open-task indicator that transitions into the expanded header
 - Apple Reminders list selection, list creation, and automatic external-change
   refresh
