@@ -17,7 +17,7 @@ NotchDo uses Apple Reminders directly through EventKit. It has no account,
 cloud service, analytics pipeline, or separate task database.
 
 <p align="center">
-  <img src="docs/assets/notchdo-demo.gif" alt="NotchDo expanding from the MacBook notch to manage reminders" width="640">
+  <img src="docs/assets/notchdo-demo.gif" alt="Capture a reminder from anywhere, open it at the notch, and choose a smart list" width="720">
 </p>
 
 ## Highlights
@@ -78,9 +78,10 @@ list or smart scope, not completed reminders or notes.
 one. An empty writable list offers the composer immediately. Empty smart
 scopes explain that there are no matching reminders.
 
-<p align="center">
-  <img src="docs/assets/notchdo-screenshot.jpeg" alt="NotchDo showing Apple Reminders beneath the MacBook notch" width="960">
-</p>
+| Quick Capture | List view | Today |
+| :---: | :---: | :---: |
+| <img src="docs/assets/global-capture.jpg" alt="Global Quick Capture with list, due date, and notes controls" width="280"> | <img src="docs/assets/list-view.png" alt="Weekend reminders expanded beneath the notch" width="280"> | <img src="docs/assets/smart-list.png" alt="Today showing reminders from multiple lists" width="280"> |
+| Add a reminder from any app, with a list, date, and notes. | Review and add reminders directly at the notch. | See reminders due today across your lists. |
 
 ## Requirements
 
