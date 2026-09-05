@@ -78,10 +78,10 @@ list or smart scope, not completed reminders or notes.
 one. An empty writable list offers the composer immediately. Empty smart
 scopes explain that there are no matching reminders.
 
-| Quick Capture | List view | Today |
+| Quick Capture | List view | Smart lists |
 | :---: | :---: | :---: |
 | <img src="docs/assets/global-capture.jpg" alt="Global Quick Capture with list, due date, and notes controls" width="280"> | <img src="docs/assets/list-view.png" alt="Weekend reminders expanded beneath the notch" width="280"> | <img src="docs/assets/smart-list.png" alt="Today showing reminders from multiple lists" width="280"> |
-| Add a reminder from any app, with a list, date, and notes. | Review and add reminders directly at the notch. | See reminders due today across your lists. |
+| Add a reminder from any app, with a list, date, and notes. | Review and add reminders directly at the notch. | View Today, Overdue, Scheduled, or All Open across your lists. |
 
 ## Requirements
 
