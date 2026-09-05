@@ -8,6 +8,7 @@ struct NotchRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rowCollapseRequest = 0
     @State private var expandedCountFrame: CGRect = .zero
+    @State private var search = ReminderSearchState()
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -35,6 +36,12 @@ struct NotchRootView: View {
             )
         }
         .animation(surfaceAnimation, value: isExpanded)
+        .onChange(of: isExpanded) { _, expanded in
+            if !expanded {
+                search.dismiss()
+            }
+        }
+        .onExitCommand(perform: handleEscape)
     }
 
     private var expandingSurface: some View {
@@ -77,10 +84,23 @@ struct NotchRootView: View {
         VStack(spacing: 12) {
             NotchHeaderView(
                 store: store,
-                onInteraction: collapseReminderRows
+                onInteraction: collapseReminderRows,
+                onSearch: presentSearch
             ) { isPresented in
                     interaction.updateTransientInteraction(isPresented)
                 }
+
+            if search.isPresented {
+                ReminderSearchView(
+                    query: $search.query,
+                    focusRequest: search.focusRequest,
+                    resultCount: filteredReminderCount,
+                    totalCount: store.reminders.count,
+                    onClear: clearSearch,
+                    onDismiss: dismissSearch
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             content
 
@@ -152,6 +172,7 @@ struct NotchRootView: View {
                 store: store,
                 isPanelExpanded: isExpanded,
                 collapseRequest: rowCollapseRequest,
+                searchQuery: search.query,
                 onTransientInteraction: interaction.updateTransientInteraction
             )
         case .requesting:
@@ -199,6 +220,31 @@ struct NotchRootView: View {
 
     private func collapseReminderRows() {
         rowCollapseRequest &+= 1
+    }
+
+    private var filteredReminderCount: Int {
+        ReminderSearchMatcher.filter(store.reminders, query: search.query).count
+    }
+
+    private func presentSearch() {
+        collapseReminderRows()
+        search.present()
+    }
+
+    private func clearSearch() {
+        search.clear()
+    }
+
+    private func dismissSearch() {
+        search.dismiss()
+    }
+
+    private func handleEscape() {
+        if search.isPresented {
+            dismissSearch()
+        } else {
+            collapseReminderRows()
+        }
     }
 
     private func undoRecentCompletion() {
