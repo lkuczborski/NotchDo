@@ -34,6 +34,7 @@ cloud service, analytics pipeline, or separate task database.
 - Apple Reminders list selection, list creation, and automatic external-change
   refresh
 - Keyboard-ready bottom composer with Return and submit-button actions
+- Fast in-memory search for the current list with Command-F
 - Create, complete, and swipe-to-delete interactions
 - New reminders scroll into view after EventKit saves them
 - Inline editing for title, notes, due date and time, all-day state, priority,

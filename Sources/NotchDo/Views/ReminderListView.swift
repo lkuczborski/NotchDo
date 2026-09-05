@@ -6,6 +6,7 @@ struct ReminderListView: View {
     let store: RemindersStore
     let isPanelExpanded: Bool
     let collapseRequest: Int
+    let searchQuery: String
     let onTransientInteraction: (Bool) -> Void
 
     @State private var expandedReminderIdentifier: String?
@@ -13,6 +14,7 @@ struct ReminderListView: View {
     @State private var scrollIndicatorTrigger = 0
     @State private var revealTask: Task<Void, Never>?
     @State private var deletionConfirmation = ReminderDeletionConfirmation()
+    @State private var reminderContentRevision = 0
 
     var body: some View {
         listContent
@@ -25,6 +27,8 @@ struct ReminderListView: View {
             .onChange(of: store.reminders.map(\.calendarItemIdentifier)) {
                 _, identifiers in
                 deletionConfirmation.cancelIfReminderIsMissing(from: identifiers)
+            }
+            .onChange(of: visibleReminderIdentifiers) { _, identifiers in
                 guard let expandedReminderIdentifier,
                       !identifiers.contains(expandedReminderIdentifier) else { return }
                 self.expandedReminderIdentifier = nil
@@ -53,9 +57,6 @@ struct ReminderListView: View {
                     reportTransientInteraction()
                 }
             }
-            .onExitCommand {
-                collapseExpandedReminder()
-            }
             .deleteConfirmationAlert(
                 isPresented: isDeleteConfirmationPresented,
                 reminder: deletionConfirmation.pendingReminder,
@@ -76,13 +77,15 @@ struct ReminderListView: View {
         Group {
             if store.reminders.isEmpty {
                 emptyState
+            } else if visibleReminders.isEmpty {
+                noSearchResultsState
             } else {
                 ScrollViewReader { scrollProxy in
-                    List(store.reminders, id: \.calendarItemIdentifier) { reminder in
+                    List(visibleReminders, id: \.calendarItemIdentifier) { reminder in
                         reminderCell(
                             reminder,
                             isLast: reminder.calendarItemIdentifier
-                                == store.reminders.last?.calendarItemIdentifier
+                                == visibleReminders.last?.calendarItemIdentifier
                         )
                         .id(reminder.calendarItemIdentifier)
                     }
@@ -108,7 +111,7 @@ struct ReminderListView: View {
                     .task(id: store.lastAddedReminderIdentifier) {
                         let identifier = store.lastAddedReminderIdentifier
                         guard let identifier else { return }
-                        guard store.reminders.contains(where: {
+                        guard visibleReminders.contains(where: {
                             $0.calendarItemIdentifier == identifier
                         }) else { return }
 
@@ -143,7 +146,9 @@ struct ReminderListView: View {
                 }
             },
             onUpdate: { draft, fields in
-                await store.update(reminder, with: draft, fields: fields)
+                let result = await store.update(reminder, with: draft, fields: fields)
+                reminderContentRevision &+= 1
+                return result
             },
             onComplete: {
                 await store.setCompleted(reminder)
@@ -181,7 +186,7 @@ struct ReminderListView: View {
 
     private var expandedRowIndex: Int? {
         guard let expandedReminderIdentifier else { return nil }
-        return store.reminders.firstIndex {
+        return visibleReminders.firstIndex {
             $0.calendarItemIdentifier == expandedReminderIdentifier
         }
     }
@@ -201,7 +206,7 @@ struct ReminderListView: View {
 
             scrollProxy.scrollTo(
                 identifier,
-                anchor: identifier == store.reminders.last?.calendarItemIdentifier
+                anchor: identifier == visibleReminders.last?.calendarItemIdentifier
                     ? .bottom
                     : .center
             )
@@ -257,5 +262,30 @@ struct ReminderListView: View {
                 .foregroundStyle(.white.opacity(0.5))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var visibleReminders: [EKReminder] {
+        _ = reminderContentRevision
+        return ReminderSearchMatcher.filter(store.reminders, query: searchQuery)
+    }
+
+    private var visibleReminderIdentifiers: [String] {
+        visibleReminders.map(\.calendarItemIdentifier)
+    }
+
+    private var noSearchResultsState: some View {
+        VStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.46))
+            Text("No matching reminders")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.84))
+            Text("Try a different search.")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
