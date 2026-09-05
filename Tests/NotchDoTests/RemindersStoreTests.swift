@@ -429,6 +429,27 @@ struct RemindersStoreTests {
         #expect(store.calendars.map(\.title) == ["Inbox", "Projects"])
     }
 
+    @Test("First-list creation reports failure and permits a subsequent successful attempt")
+    func firstListCreationFailure() async {
+        let events = FakeReminderEventStore()
+        let store = RemindersStore(eventStore: events)
+        await store.start()
+        events.saveError = TestFailure.requested
+
+        #expect(await !store.createCalendar(title: "Tasks"))
+        #expect(store.calendars.isEmpty)
+        #expect(store.selectedCalendar == nil)
+        #expect(store.syncErrorMessage?.hasPrefix("Couldn’t create the list.") == true)
+
+        store.clearSyncError()
+        #expect(store.syncErrorMessage == nil)
+        #expect(events.createdCalendars.isEmpty)
+        events.saveError = nil
+        #expect(await store.createCalendar(title: "Tasks"))
+        #expect(store.selectedCalendarTitle == "Tasks")
+        #expect(events.createdCalendars.count == 1)
+    }
+
     @Test("Adding trims titles, rejects empty input, and appends the new reminder")
     func addReminder() async {
         let events = FakeReminderEventStore()
@@ -465,7 +486,7 @@ struct RemindersStoreTests {
             Issue.record("A save error should become a failed sync state")
             return
         }
-        #expect(store.syncErrorMessage != nil)
+        #expect(store.syncErrorMessage?.hasPrefix("Couldn’t add the reminder.") == true)
         store.clearSyncError()
         #expect(store.syncState == .idle)
         #expect(store.syncErrorMessage == nil)

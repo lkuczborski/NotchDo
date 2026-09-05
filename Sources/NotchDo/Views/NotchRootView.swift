@@ -11,6 +11,9 @@ struct NotchRootView: View {
     @State private var search = ReminderSearchState()
     @State private var isCreateListPresented = false
     @State private var newListTitle = ""
+    @State private var isHeaderPresented = false
+    @State private var isErrorPresented = false
+    @State private var isRowPresented = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -34,10 +37,13 @@ struct NotchRootView: View {
         .background {
             SyncErrorPresenter(
                 store: store,
-                onPresentationChange: interaction.updateTransientInteraction
+                onPresentationChange: { isPresented in
+                    isErrorPresented = isPresented
+                    reportTransientInteraction()
+                }
             )
         }
-        .alert("Create Your First List", isPresented: $isCreateListPresented) {
+        .alert("New List", isPresented: $isCreateListPresented) {
             TextField("List name", text: $newListTitle)
             Button("Cancel", role: .cancel) {
                 newListTitle = ""
@@ -49,10 +55,10 @@ struct NotchRootView: View {
             }
             .disabled(newListTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
-            Text("The list is created directly in Apple Reminders.")
+            Text("This list will appear in Apple Reminders.")
         }
-        .onChange(of: isCreateListPresented) { _, isPresented in
-            interaction.updateTransientInteraction(isPresented)
+        .onChange(of: isCreateListPresented) { _, _ in
+            reportTransientInteraction()
         }
         .animation(surfaceAnimation, value: isExpanded)
         .onChange(of: isExpanded) { _, expanded in
@@ -104,10 +110,13 @@ struct NotchRootView: View {
             NotchHeaderView(
                 store: store,
                 onInteraction: collapseReminderRows,
-                onSearch: presentSearch
-            ) { isPresented in
-                    interaction.updateTransientInteraction(isPresented)
-                }
+                onSearch: presentSearch,
+                onTransientInteractionChange: { isPresented in
+                    isHeaderPresented = isPresented
+                    reportTransientInteraction()
+                },
+                onCreateList: { isCreateListPresented = true }
+            )
 
             if search.isPresented {
                 ReminderSearchView(
@@ -115,7 +124,6 @@ struct NotchRootView: View {
                     focusRequest: search.focusRequest,
                     resultCount: filteredReminderCount,
                     totalCount: store.reminders.count,
-                    onClear: clearSearch,
                     onDismiss: dismissSearch
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -194,13 +202,16 @@ struct NotchRootView: View {
                 isPanelExpanded: isExpanded,
                 collapseRequest: rowCollapseRequest,
                 searchQuery: search.query,
-                onTransientInteraction: interaction.updateTransientInteraction
+                onTransientInteraction: { isPresented in
+                    isRowPresented = isPresented
+                    reportTransientInteraction()
+                }
             )
         case .initialLoading:
             AccessStateView(
                 symbol: "arrow.triangle.2.circlepath",
                 title: "Loading reminders",
-                message: "Checking your selected list in Apple Reminders.",
+                message: "",
                 showsProgress: true,
                 actionTitle: nil,
                 action: nil
@@ -211,7 +222,7 @@ struct NotchRootView: View {
                 title: "No reminder lists yet",
                 message: "Create your first list here or in Apple Reminders.",
                 showsProgress: false,
-                actionTitle: "Create Your First List",
+                actionTitle: "Create List",
                 action: { isCreateListPresented = true }
             )
         case .noSelectedCalendar:
@@ -222,15 +233,6 @@ struct NotchRootView: View {
                 showsProgress: false,
                 actionTitle: nil,
                 action: nil
-            )
-        case .failed:
-            AccessStateView(
-                symbol: "exclamationmark.triangle.fill",
-                title: "Couldn’t update this list",
-                message: "Your reminders are unchanged. Try refreshing the list.",
-                showsProgress: false,
-                actionTitle: "Try Again",
-                action: { Task { await store.reload() } }
             )
         case .requestingPermission:
             AccessStateView(
@@ -263,7 +265,7 @@ struct NotchRootView: View {
             AccessStateView(
                 symbol: "checklist",
                 title: "Use Apple Reminders",
-                message: "No separate account or task database — just your existing lists.",
+                message: "View and manage your Apple Reminders lists here.",
                 showsProgress: false,
                 actionTitle: "Continue",
                 action: { Task { await store.requestAccess() } }
@@ -309,10 +311,6 @@ struct NotchRootView: View {
         search.present()
     }
 
-    private func clearSearch() {
-        search.clear()
-    }
-
     private func dismissSearch() {
         search.dismiss()
     }
@@ -328,6 +326,13 @@ struct NotchRootView: View {
     private func undoRecentCompletion() {
         Task { await store.undoRecentCompletion() }
     }
+
+    private func reportTransientInteraction() {
+        interaction.updateTransientInteraction(
+            isHeaderPresented || isCreateListPresented || isErrorPresented || isRowPresented
+        )
+    }
+
 }
 
 private struct SyncErrorPresenter: View {
@@ -337,7 +342,7 @@ private struct SyncErrorPresenter: View {
     var body: some View {
         Color.clear
             .alert(
-                "Reminders couldn’t be updated",
+                "Reminders Error",
                 isPresented: isErrorPresented
             ) {
                 Button("OK") {

@@ -8,7 +8,6 @@ enum ReminderDisplayState: Equatable {
     case noCalendars
     case noSelectedCalendar
     case initialLoading
-    case failed(String)
     case emptyList(isReadOnly: Bool)
     case reminders(isReadOnly: Bool)
 
@@ -43,8 +42,6 @@ enum ReminderDisplayState: Equatable {
             let isReadOnly = !selectedCalendarIsWritable
             if case .syncing = syncState, lastSyncedAt == nil, reminderCount == 0 {
                 self = .initialLoading
-            } else if case let .failed(message) = syncState, reminderCount == 0 {
-                self = .failed(message)
             } else if reminderCount == 0 {
                 self = .emptyList(isReadOnly: isReadOnly)
             } else {
