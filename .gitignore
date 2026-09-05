@@ -22,3 +22,6 @@ qa-*.png
 # Editor files
 *.swp
 *~
+
+# Local demo recordings and editing assets
+recordings/
