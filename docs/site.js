@@ -1,4 +1,4 @@
-/* Static, dependency-free enhancements. The demo never uses storage or a network API. */
+/* Static, dependency-free enhancements. */
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 function activateTab(tab) {
   for (const item of tabs) {
@@ -27,292 +27,137 @@ for (const tab of tabs) {
   });
 }
 
-const initialTasks = [
-  { id: 1, title: "Pick up fresh flowers", list: "Weekend", date: "today" },
-  {
-    id: 2,
-    title: "Book the ceramics workshop",
-    list: "Weekend",
-    date: "next-week",
-  },
-  { id: 3, title: "Return library books", list: "Weekend", date: "overdue" },
-  { id: 4, title: "Take the long way home", list: "Weekend", date: "none" },
-  { id: 5, title: "Review café moodboard", list: "Studio", date: "today" },
-  {
-    id: 6,
-    title: "Sketch the autumn collection",
-    list: "Studio",
-    date: "today",
-  },
-];
-let tasks = initialTasks.map((task) => ({ ...task }));
-let nextId = 7;
-let lastCompleted = null;
-const app = document.getElementById("demo-app");
-const scope = document.getElementById("demo-scope");
-const search = document.getElementById("demo-search");
-const taskList = document.getElementById("demo-tasks");
-const status = document.getElementById("demo-status");
-const undo = document.getElementById("demo-undo");
-const composer = document.getElementById("demo-composer");
-const titleInput = document.getElementById("demo-title");
-const notchToggle = document.getElementById("notch-toggle");
-const content = document.getElementById("demo-content");
-const dialog = document.getElementById("capture-dialog");
-const captureForm = document.getElementById("capture-form");
-const captureInput = document.getElementById("capture-input");
-const captureDate = document.getElementById("capture-date");
-const customDate = document.getElementById("capture-custom-date");
-const captureList = document.getElementById("capture-list");
-let captureOpener = null;
-const normalize = (value) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase();
-const isList = () => ["Weekend", "Studio"].includes(scope.value);
-// Relative examples keep this demo useful on any day, without changing actual reminders.
-function dateKind(task) {
-  if (!task.customDate) return task.date;
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  return task.customDate === todayKey
-    ? "today"
-    : task.customDate < todayKey
-      ? "overdue"
-      : "future";
-}
-function matchesScope(task) {
-  if (isList()) return task.list === scope.value;
-  const kind = dateKind(task);
-  if (scope.value === "Today") return kind === "today";
-  if (scope.value === "Overdue") return kind === "overdue";
-  if (scope.value === "Scheduled") return kind !== "none";
-  return true;
-}
-function dateLabel(task) {
-  if (task.customDate) {
-    const [year, month, day] = task.customDate.split("-").map(Number);
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(new Date(year, month - 1, day));
+// Theme choice persists locally. Auto continues following live system changes.
+const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+const themeButtons = [...document.querySelectorAll("[data-theme-choice]")];
+function applyTheme(theme) {
+  const choice = ["system", "light", "dark"].includes(theme) ? theme : "system";
+  document.documentElement.dataset.theme = choice;
+  for (const button of themeButtons) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.themeChoice === choice),
+    );
   }
-  return {
-    today: "Today",
-    tomorrow: "Tomorrow",
-    "next-week": "Next Week",
-    overdue: "Overdue",
-    none: "No date",
-  }[task.date];
+  const dark =
+    choice === "dark" || (choice === "system" && systemTheme.matches);
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    meta.content = dark ? "#13171b" : "#f7f8fa";
+  }
 }
-function renderTasks() {
-  const scopedTasks = tasks.filter(
-    (task) => !task.completed && matchesScope(task),
-  );
-  const visibleTasks = scopedTasks.filter((task) =>
-    normalize(task.title).includes(normalize(search.value.trim())),
-  );
-  taskList.replaceChildren();
-  for (const task of visibleTasks) {
-    const row = document.createElement("li");
-    row.className = task.list.toLowerCase();
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "complete-task";
-    button.dataset.taskId = task.id;
-    button.setAttribute("aria-label", `Complete ${task.title}`);
-    button.addEventListener("click", () => {
-      const index = visibleTasks.indexOf(task);
-      task.completed = true;
-      lastCompleted = task;
-      status.textContent = `Completed “${task.title}”.`;
-      renderTasks();
-      const nextButtons = taskList.querySelectorAll("button");
-      (nextButtons[Math.min(index, nextButtons.length - 1)] || undo).focus({
-        preventScroll: true,
-      });
-    });
-    const body = document.createElement("div");
-    body.className = "task-body";
-    const title = document.createElement("p");
-    title.className = "task-title";
-    title.textContent = task.title;
-    const meta = document.createElement("p");
-    meta.className = `task-meta${dateKind(task) === "overdue" ? " overdue" : ""}`;
-    meta.textContent = `${dateLabel(task)}${isList() ? "" : ` · ${task.list}`}`;
-    body.append(title, meta);
-    if (task.notes) {
-      const notes = document.createElement("p");
-      notes.className = "task-notes";
-      notes.textContent = task.notes;
-      body.append(notes);
+for (const button of themeButtons) {
+  button.addEventListener("click", () => {
+    const choice = button.dataset.themeChoice;
+    applyTheme(choice);
+    try {
+      localStorage.setItem("notchdo-theme", choice);
+    } catch {
+      // The control remains usable when browser storage is unavailable.
     }
-    row.append(button, body);
-    taskList.append(row);
-  }
-  const count = document.getElementById("task-count");
-  count.textContent = scopedTasks.length;
-  count.setAttribute("aria-label", `${scopedTasks.length} open reminders`);
-  document.getElementById("demo-empty").hidden = visibleTasks.length > 0;
-  composer.hidden = !isList();
-  document.getElementById("scope-capture").hidden = isList();
-  undo.hidden = !lastCompleted;
-}
-function setExpanded(expanded) {
-  content.hidden = !expanded;
-  notchToggle.setAttribute("aria-expanded", String(expanded));
-  notchToggle.querySelector(".sr-only").textContent = expanded
-    ? "Collapse demo notch"
-    : "Expand demo notch";
-  app.classList.toggle("is-collapsed", !expanded);
-}
-notchToggle.addEventListener("click", () => setExpanded(content.hidden));
-search.addEventListener("input", () => {
-  renderTasks();
-  status.textContent = `${taskList.children.length} matching reminder${taskList.children.length === 1 ? "" : "s"}.`;
-});
-scope.addEventListener("change", () => {
-  renderTasks();
-  status.textContent = `${taskList.children.length} reminder${taskList.children.length === 1 ? "" : "s"} in ${scope.value}.`;
-});
-app.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
-    event.preventDefault();
-    setExpanded(true);
-    search.focus();
-  }
-  if (event.key === "Escape" && event.target === search) {
-    search.value = "";
-    renderTasks();
-    scope.focus();
-  }
-});
-undo.addEventListener("click", () => {
-  if (!lastCompleted) return;
-  const restored = lastCompleted;
-  restored.completed = false;
-  lastCompleted = null;
-  status.textContent = `Restored “${restored.title}”.`;
-  renderTasks();
-  (taskList.querySelector(`[data-task-id="${restored.id}"]`) || scope).focus({
-    preventScroll: true,
-  });
-});
-function addTask({ title, list, date = "none", notes = "", customDate = "" }) {
-  const task = { id: nextId++, title, list, date, notes, customDate };
-  tasks.push(task);
-  scope.value = list;
-  search.value = "";
-  setExpanded(true);
-  status.textContent = `Added “${title}” to ${list}.`;
-  renderTasks();
-  taskList.lastElementChild?.scrollIntoView({
-    block: "nearest",
-    behavior: "instant",
   });
 }
-function validateTitle(input) {
-  input.setCustomValidity(input.value.trim() ? "" : "Enter a reminder title.");
-  return input.reportValidity();
-}
-for (const input of [titleInput, captureInput])
-  input.addEventListener("input", () => input.setCustomValidity(""));
-composer.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!validateTitle(titleInput)) return;
-  addTask({ title: titleInput.value.trim(), list: scope.value });
-  composer.reset();
-  titleInput.focus({ preventScroll: true });
+systemTheme.addEventListener("change", () =>
+  applyTheme(document.documentElement.dataset.theme),
+);
+window.addEventListener("storage", (event) => {
+  if (event.key === "notchdo-theme" || event.key === null)
+    applyTheme(event.newValue);
 });
-document.getElementById("reset-demo").addEventListener("click", () => {
-  tasks = initialTasks.map((task) => ({ ...task }));
-  nextId = 7;
-  lastCompleted = null;
-  scope.value = "Weekend";
-  search.value = "";
-  composer.reset();
-  captureForm.reset();
-  updateCustomDate();
-  setExpanded(true);
-  status.textContent = "Demo reset. Try checking off a reminder.";
-  renderTasks();
-});
-for (const opener of document.querySelectorAll("[data-open-capture]")) {
-  opener.addEventListener("click", () => {
-    captureOpener = opener;
-    if (isList()) captureList.value = scope.value;
-    dialog.showModal();
-    captureInput.focus();
-  });
-}
-function closeCapture() {
-  dialog.close();
-}
-document
-  .getElementById("close-capture")
-  .addEventListener("click", closeCapture);
-dialog.addEventListener("click", (event) => {
-  if (event.target !== dialog) return;
-  const rect = dialog.getBoundingClientRect();
-  if (
-    event.clientX < rect.left ||
-    event.clientX > rect.right ||
-    event.clientY < rect.top ||
-    event.clientY > rect.bottom
-  )
-    closeCapture();
-});
-dialog.addEventListener("close", () => {
-  // Saving can hide a scope-specific opener, so choose a visible focus destination.
-  if (captureOpener?.getClientRects().length)
-    captureOpener.focus({ preventScroll: true });
-  else scope.focus({ preventScroll: true });
-});
-// Keep Tab at the dialog's ends inside the form, including in browsers that
-// otherwise move focus to their chrome before wrapping a native dialog.
-dialog.addEventListener("keydown", (event) => {
-  if (event.key !== "Tab") return;
-  const controls = [
-    ...dialog.querySelectorAll("button, input, select, textarea"),
-  ].filter((control) => !control.disabled && control.getClientRects().length);
-  const first = controls[0];
-  const last = controls[controls.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-});
-function updateCustomDate() {
-  const custom = captureDate.value === "custom";
-  document.getElementById("custom-date-field").hidden = !custom;
-  customDate.required = custom;
-}
-captureDate.addEventListener("change", updateCustomDate);
-captureForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!validateTitle(captureInput)) return;
-  const fields = new FormData(captureForm);
-  addTask({
-    title: fields.get("title").trim(),
-    notes: fields.get("notes").trim(),
-    list: fields.get("list"),
-    date: fields.get("date"),
-    customDate: fields.get("date") === "custom" ? fields.get("customDate") : "",
-  });
-  captureForm.reset();
-  updateCustomDate();
-  closeCapture();
-});
-renderTasks();
+applyTheme(document.documentElement.dataset.theme);
 
-// The source keeps every feature visible if this script cannot initialize.
+// Use the original GIF without resampling. A still image is the no-script and
+// reduced-motion default; pause it offscreen and when the tab is in the background.
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const stillSource = document.getElementById("overview-still");
+const motionToggle = document.getElementById("motion-toggle");
+const overview = document.querySelector(".hero-visual");
+let wantsMotion = !reducedMotion.matches;
+let overviewVisible = true;
+function updateMotion() {
+  const playing = wantsMotion && overviewVisible && !document.hidden;
+  stillSource.media = playing ? "not all" : "all";
+  motionToggle.textContent = wantsMotion ? "Pause animation" : "Play animation";
+}
+motionToggle.addEventListener("click", () => {
+  wantsMotion = !wantsMotion;
+  updateMotion();
+});
+reducedMotion.addEventListener("change", (event) => {
+  wantsMotion = !event.matches;
+  updateMotion();
+});
+document.addEventListener("visibilitychange", updateMotion);
+if ("IntersectionObserver" in window) {
+  new IntersectionObserver(([entry]) => {
+    overviewVisible = entry.isIntersecting;
+    updateMotion();
+  }).observe(overview);
+}
+updateMotion();
+
+// The source remains readable when scripting is disabled or unavailable.
 activateTab(tabs[0]);
-
-// Reveal interactive controls only after every handler is ready.
 for (const element of document.querySelectorAll("[data-enhanced]"))
   element.hidden = false;
+
+// No version is baked into the page. A failed, limited or unavailable API leaves
+// generic latest-release links intact instead of showing a stale version.
+async function updateRelease() {
+  const repository = "https://github.com/lkuczborski/NotchDo";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/lkuczborski/NotchDo/releases/latest",
+      {
+        credentials: "omit",
+        signal: controller.signal,
+        headers: { Accept: "application/vnd.github+json" },
+      },
+    );
+    if (!response.ok) return;
+    const release = await response.json();
+    const tag = release.tag_name;
+    if (
+      release.draft !== false ||
+      release.prerelease !== false ||
+      typeof tag !== "string" ||
+      tag.length > 32 ||
+      !/^v\d+(?:\.\d+)+$/.test(tag) ||
+      !release.published_at ||
+      !Number.isFinite(Date.parse(release.published_at))
+    )
+      return;
+    const releaseURL = `${repository}/releases/tag/${encodeURIComponent(tag)}`;
+    if (release.html_url !== releaseURL) return;
+    const version = tag.slice(1);
+    for (const label of document.querySelectorAll("[data-release-label]")) {
+      label.textContent = `Version ${version} is here`;
+    }
+    for (const label of document.querySelectorAll("[data-release-version]")) {
+      label.textContent = `Version ${version} · `;
+    }
+    for (const link of document.querySelectorAll("[data-release-link]"))
+      link.href = releaseURL;
+    const filename = `NotchDo-${tag}-macos-universal.zip`;
+    const downloadURL = `${repository}/releases/download/${encodeURIComponent(tag)}/${filename}`;
+    const asset =
+      Array.isArray(release.assets) &&
+      release.assets.find(
+        (asset) =>
+          asset.name === filename &&
+          asset.state === "uploaded" &&
+          asset.size > 0 &&
+          asset.browser_download_url === downloadURL,
+      );
+    if (asset) {
+      for (const link of document.querySelectorAll("[data-download-link]"))
+        link.href = downloadURL;
+    }
+  } catch {
+    // The release page is always available through the original HTML links.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+updateRelease();
